@@ -11,8 +11,13 @@ class Base(DeclarativeBase):
 
 def make_engine(database_url: str | None = None):
     url = database_url or os.getenv("DATABASE_URL", "sqlite:///./govasset.db")
+    if url.startswith("postgresql://"):
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    return create_engine(url, connect_args=connect_args)
+    engine = create_engine(url, connect_args=connect_args)
+    if engine.dialect.name == "postgresql":
+        return engine.execution_options(schema_translate_map={None: "govasset"})
+    return engine
 
 
 def make_session_factory(engine):
@@ -20,11 +25,21 @@ def make_session_factory(engine):
 
 
 def initialize_schema(engine: Engine) -> None:
+    schema = "govasset" if engine.dialect.name == "postgresql" else None
+    if schema is not None:
+        with engine.begin() as connection:
+            connection.exec_driver_sql("CREATE SCHEMA IF NOT EXISTS govasset")
     Base.metadata.create_all(engine)
-    asset_columns = {column["name"] for column in inspect(engine).get_columns("assets")}
+    asset_columns = {
+        column["name"] for column in inspect(engine).get_columns("assets", schema=schema)
+    }
     if "last_inspected_on" not in asset_columns:
         with engine.begin() as connection:
-            connection.execute(text("ALTER TABLE assets ADD COLUMN last_inspected_on DATE"))
+            connection.execute(
+                text("ALTER TABLE govasset.assets ADD COLUMN last_inspected_on DATE")
+                if schema is not None
+                else text("ALTER TABLE assets ADD COLUMN last_inspected_on DATE")
+            )
 
 
 def session_dependency(factory: sessionmaker[Session]):

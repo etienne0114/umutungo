@@ -1,11 +1,15 @@
+import os
 from contextlib import asynccontextmanager
 from datetime import date
 
-from fastapi import Depends, FastAPI, HTTPException, Query, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Engine, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from govasset_api.auth import require_authenticated_user
+from govasset_api.auth import authentication_required, supabase_url
 from govasset_api.database import (
     initialize_schema,
     make_engine,
@@ -44,7 +48,13 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        initialize_schema(database_engine)
+        if authentication_required() and engine is None:
+            if supabase_url() is None:
+                raise RuntimeError("SUPABASE_URL is required when AUTH_REQUIRED is enabled.")
+            if database_engine.dialect.name != "postgresql":
+                raise RuntimeError("Hosted mode requires a persistent PostgreSQL DATABASE_URL.")
+        else:
+            initialize_schema(database_engine)
         yield
 
     app = FastAPI(
@@ -56,13 +66,27 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         ),
         lifespan=lifespan,
     )
+    cors_origins = [
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+        ).split(",")
+        if origin.strip()
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_methods=["GET", "POST"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+    api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_authenticated_user)])
 
     @app.get("/health", tags=["system"])
     def health():
         return {"status": "ok"}
 
-    @app.post(
-        "/api/v1/assets",
+    @api.post(
+        "/assets",
         response_model=AssetRead,
         status_code=status.HTTP_201_CREATED,
         tags=["assets"],
@@ -81,7 +105,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         session.refresh(asset)
         return asset
 
-    @app.get("/api/v1/assets", response_model=list[AssetRead], tags=["assets"])
+    @api.get("/assets", response_model=list[AssetRead], tags=["assets"])
     def list_assets(
         active: bool | None = None,
         session: Session = Depends(get_session),
@@ -91,15 +115,15 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             query = query.where(Asset.active.is_(active))
         return session.scalars(query).all()
 
-    @app.get("/api/v1/assets/{asset_id}", response_model=AssetRead, tags=["assets"])
+    @api.get("/assets/{asset_id}", response_model=AssetRead, tags=["assets"])
     def get_asset(asset_id: int, session: Session = Depends(get_session)):
         asset = session.get(Asset, asset_id)
         if asset is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found.")
         return asset
 
-    @app.post(
-        "/api/v1/assets/{asset_id}/maintenance",
+    @api.post(
+        "/assets/{asset_id}/maintenance",
         response_model=MaintenanceRead,
         status_code=status.HTTP_201_CREATED,
         tags=["maintenance"],
@@ -117,8 +141,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         session.refresh(record)
         return record
 
-    @app.get(
-        "/api/v1/assets/{asset_id}/maintenance",
+    @api.get(
+        "/assets/{asset_id}/maintenance",
         response_model=list[MaintenanceRead],
         tags=["maintenance"],
     )
@@ -132,8 +156,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         )
         return session.scalars(query).all()
 
-    @app.post(
-        "/api/v1/assets/{asset_id}/inspections",
+    @api.post(
+        "/assets/{asset_id}/inspections",
         response_model=InspectionRead,
         status_code=status.HTTP_201_CREATED,
         tags=["inspections"],
@@ -160,8 +184,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         session.refresh(inspection)
         return inspection
 
-    @app.get(
-        "/api/v1/assets/{asset_id}/inspections",
+    @api.get(
+        "/assets/{asset_id}/inspections",
         response_model=list[InspectionRead],
         tags=["inspections"],
     )
@@ -175,7 +199,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         )
         return session.scalars(query).all()
 
-    @app.get("/api/v1/triage", response_model=list[TriageItem], tags=["triage"])
+    @api.get("/triage", response_model=list[TriageItem], tags=["triage"])
     def triage_queue(
         as_of: date | None = Query(default=None, description="Evaluation date; defaults to today."),
         risk_level: RiskLevel | None = None,
@@ -197,8 +221,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         }
         return sorted(items, key=lambda item: (rank[item.risk_level], item.asset.asset_code))
 
-    @app.post(
-        "/api/v1/triage-runs",
+    @api.post(
+        "/triage-runs",
         response_model=TriageRunRead,
         status_code=status.HTTP_201_CREATED,
         tags=["triage"],
@@ -241,7 +265,36 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             recommendation_count=count or 0,
         )
 
-    @app.get("/api/v1/triage-runs/{run_id}", response_model=TriageRunRead, tags=["triage"])
+    @api.get(
+        "/triage-runs",
+        response_model=list[TriageRunRead],
+        tags=["triage"],
+    )
+    def list_triage_runs(
+        limit: int = Query(default=50, ge=1, le=100),
+        offset: int = Query(default=0, ge=0),
+        session: Session = Depends(get_session),
+    ):
+        rows = session.execute(
+            select(TriageRun, func.count(Recommendation.id))
+            .outerjoin(Recommendation, Recommendation.run_id == TriageRun.id)
+            .group_by(TriageRun.id)
+            .order_by(TriageRun.id.desc())
+            .offset(offset)
+            .limit(limit)
+        ).all()
+        return [
+            TriageRunRead(
+                id=run.id,
+                evaluated_on=run.evaluated_on,
+                rule_version=run.rule_version,
+                created_at=run.created_at,
+                recommendation_count=count,
+            )
+            for run, count in rows
+        ]
+
+    @api.get("/triage-runs/{run_id}", response_model=TriageRunRead, tags=["triage"])
     def get_triage_run(run_id: int, session: Session = Depends(get_session)):
         run = session.get(TriageRun, run_id)
         if run is None:
@@ -257,7 +310,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             recommendation_count=count or 0,
         )
 
-    @app.get("/api/v1/recommendations", response_model=list[RecommendationRead], tags=["triage"])
+    @api.get("/recommendations", response_model=list[RecommendationRead], tags=["triage"])
     def list_recommendations(
         run_id: int | None = None,
         risk_level: RiskLevel | None = None,
@@ -272,8 +325,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             query = query.where(Recommendation.risk_level == risk_level.value)
         return session.scalars(query.offset(offset).limit(limit)).all()
 
-    @app.get(
-        "/api/v1/recommendations/{recommendation_id}",
+    @api.get(
+        "/recommendations/{recommendation_id}",
         response_model=RecommendationRead,
         tags=["triage"],
     )
@@ -285,8 +338,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             )
         return recommendation
 
-    @app.post(
-        "/api/v1/recommendations/{recommendation_id}/events",
+    @api.post(
+        "/recommendations/{recommendation_id}/events",
         response_model=RecommendationEventRead,
         status_code=status.HTTP_201_CREATED,
         tags=["triage"],
@@ -309,8 +362,8 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         session.refresh(event)
         return event
 
-    @app.get(
-        "/api/v1/recommendations/{recommendation_id}/events",
+    @api.get(
+        "/recommendations/{recommendation_id}/events",
         response_model=list[RecommendationEventRead],
         tags=["triage"],
     )
@@ -329,6 +382,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         )
         return session.scalars(query).all()
 
+    app.include_router(api)
     return app
 
 

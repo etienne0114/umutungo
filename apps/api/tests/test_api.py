@@ -9,7 +9,8 @@ from govasset_api.main import create_app
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("AUTH_REQUIRED", "false")
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -275,9 +276,13 @@ def test_empty_triage_run_and_missing_recommendation(client):
     run = client.post("/api/v1/triage-runs", params={"as_of": "2026-09-29"}).json()
     assert run["recommendation_count"] == 0
     assert client.get("/api/v1/recommendations/999").status_code == 404
+    listed = client.get("/api/v1/triage-runs").json()
+    assert listed[0] == run
+    assert client.get("/api/v1/triage-runs", params={"limit": 0}).status_code == 422
 
 
-def test_startup_adds_inspection_date_column_to_legacy_database():
+def test_startup_adds_inspection_date_column_to_legacy_database(monkeypatch):
+    monkeypatch.setenv("AUTH_REQUIRED", "false")
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -317,3 +322,106 @@ def test_startup_adds_inspection_date_column_to_legacy_database():
     assert response.json()["condition"] == "fair"
     assert response.json()["last_inspected_on"] is None
     engine.dispose()
+
+
+def test_frontend_cors_preflight_allows_local_next_app(client):
+    response = client.options(
+        "/api/v1/assets",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_frontend_cors_rejects_unconfigured_origin(client):
+    response = client.options(
+        "/api/v1/assets",
+        headers={
+            "Origin": "https://untrusted.example",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert "access-control-allow-origin" not in response.headers
+
+
+def test_hosted_api_requires_supabase_authentication(client, monkeypatch):
+    from govasset_api import auth
+
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+
+    unauthenticated = client.get("/api/v1/assets")
+    assert unauthenticated.status_code == 401
+
+    monkeypatch.setattr(
+        auth,
+        "verify_supabase_token",
+        lambda _token, _url: {
+            "sub": "user-123",
+            "role": "authenticated",
+            "app_metadata": {"govasset_access": "approved"},
+        },
+    )
+    authenticated = client.get(
+        "/api/v1/assets",
+        headers={"Authorization": "Bearer valid-test-token"},
+    )
+    assert authenticated.status_code == 200
+
+
+def test_authentication_fails_closed_without_project_url(client, monkeypatch):
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+
+    response = client.get("/api/v1/assets")
+
+    assert response.status_code == 503
+
+
+def test_supabase_token_validation_checks_signature_issuer_and_audience(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from govasset_api import auth
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    project_url = "https://example.supabase.co"
+    now = datetime.now(timezone.utc)
+    claims = {
+        "sub": "user-123",
+        "role": "authenticated",
+        "aud": "authenticated",
+        "iss": f"{project_url}/auth/v1",
+        "iat": now,
+        "exp": now + timedelta(minutes=5),
+        "app_metadata": {"govasset_access": "approved"},
+    }
+    token = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "test-key"})
+
+    class TestJwksClient:
+        def get_signing_key_from_jwt(self, _token):
+            return SimpleNamespace(key=private_key.public_key())
+
+    monkeypatch.setattr(auth, "_jwks_client", lambda _url: TestJwksClient())
+
+    assert auth.verify_supabase_token(token, project_url)["sub"] == "user-123"
+    with pytest.raises(jwt.InvalidIssuerError):
+        auth.verify_supabase_token(token, "https://other.supabase.co")
+
+    bad_audience_token = jwt.encode(
+        {**claims, "aud": "anon"},
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "test-key"},
+    )
+    with pytest.raises(jwt.InvalidAudienceError):
+        auth.verify_supabase_token(bad_audience_token, project_url)

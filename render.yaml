@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: titans-govasset-api
+    runtime: docker
+    region: frankfurt
+    plan: free
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: ./apps/api
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: AUTH_REQUIRED
+        value: "true"
+      - key: CORS_ORIGINS
+        value: https://titans-blue-seven.vercel.app
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false

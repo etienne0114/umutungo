@@ -1,7 +1,7 @@
 # Government Asset Maintenance Intelligence
 
 **Working title:** GovAsset Insight  
-**Status:** Local API prototype  
+**Status:** Frontend deployed to Vercel; Render API deployment is pending repository sync and secret setup
 **Purpose:** Help public-sector maintenance teams prioritize inspections and planned work using existing asset and maintenance data. The product is decision support; authorized people retain operational authority.
 
 ## Start here
@@ -13,7 +13,8 @@
 5. [Roadmap and acceptance gates](docs/05-roadmap-and-acceptance.md)
 6. [Project configuration](project.yaml)
 7. [Original workshop and requirements inputs](docs/source/)
-8. [Pilot API](apps/api/README.md)
+8. [Pilot API and hosted setup](apps/api/README.md)
+9. [Web application](apps/web/README.md)
 
 ## Project principle
 
@@ -23,7 +24,7 @@ The platform must complement—not replace or duplicate—official asset, fleet,
 
 ## Current maturity
 
-This repository contains the project definition and an early local API prototype. The API records assets, inspections, and maintenance; it creates versioned rule-based triage runs and captures review/outcome events. The institution, asset classes, data access, integrations, hosting, authentication, and numerical pilot targets remain to be confirmed. It does not run AI models and is not approved for operational data or network deployment.
+This repository contains the project definition, a local API prototype, and a Next.js dashboard intended to connect to the API. The dashboard is deployed to Vercel as `titans` and supports invitation-only Supabase sign-in; hosted API requests verify Supabase access tokens and require an administrator-approved account. PostgreSQL migrations and a Render Docker-service Blueprint are in place. The API has not been deployed, and no remote database migration has been applied. The product does not run AI models and is not approved for operational data or network deployment.
 
 ## Source-of-truth policy
 
