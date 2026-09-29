@@ -1,0 +1,49 @@
+schema_version: 1
+project:
+  name: "Government Asset Maintenance Intelligence"
+  working_title: "GovAsset Insight"
+  status: "prototype"
+  description: >-
+    Decision support for prioritizing public-sector asset inspections and
+    maintenance using authorized existing data.
+  owner: "Tech Titans (team identity to confirm)"
+  focal_institution: null
+  focal_person: null
+
+principles:
+  - "Complement existing government systems; do not recreate their system-of-record functions."
+  - "Human review is required before maintenance, spending, or safety decisions."
+  - "No prediction when input data is insufficient or outside validated coverage."
+  - "Prefer the simplest evidence-supported method over unnecessary AI complexity."
+  - "Do not commit operational or personal data to source control."
+
+pilot:
+  institution_count: 1
+  asset_classes: []
+  start_date: null
+  historical_data_period: null
+  prediction_horizon_days: null
+  numerical_targets: "Set with the institution after workflow and baseline measurement."
+
+gates:
+  - id: "G0"
+    name: "Problem and stakeholder validation"
+    required_before: "Data access"
+  - id: "G1"
+    name: "Data rights, inventory, quality, and baseline approved"
+    required_before: "Predictive-model development"
+  - id: "G2"
+    name: "Baseline method and time-aware evaluation accepted"
+    required_before: "User-facing risk recommendations"
+  - id: "G3"
+    name: "Security, privacy, usability, and operational acceptance"
+    required_before: "Pilot deployment"
+  - id: "G4"
+    name: "Pilot outcomes reviewed and scale decision documented"
+    required_before: "Expansion"
+
+documentation:
+  canonical_specification: "docs/"
+  preserved_inputs: "docs/source/"
+  decision_records: "docs/decisions/"
+  change_policy: "Update the canonical document and relevant decision record; avoid duplicate requirement lists."
