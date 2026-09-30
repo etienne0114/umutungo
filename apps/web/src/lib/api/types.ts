@@ -95,6 +95,30 @@ export interface AdminUser {
   organization: string | null;
 }
 
+export interface OperationsReport {
+  generated_on: string;
+  total_assets: number;
+  active_assets: number;
+  inactive_assets: number;
+  condition_recorded_assets: number;
+  condition_unknown_assets: number;
+  missing_acquisition_date: number;
+  missing_inspection_date: number;
+  missing_service_schedule: number;
+  inconsistent_service_dates: number;
+  assets_with_maintenance_history: number;
+  inspection_records: number;
+  maintenance_records: number;
+  service_due_assets: number;
+  overdue_service_assets: number;
+  risk_counts: Record<RiskLevel, number>;
+  planned_maintenance_records: number;
+  unplanned_maintenance_records: number;
+  downtime_hours_recorded: number;
+  maintenance_records_without_downtime: number;
+  untracked_domains: string[];
+}
+
 export interface AssetCreate {
   asset_code: string;
   asset_type: string;

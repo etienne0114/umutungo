@@ -1671,6 +1671,77 @@ h3 {
   color: #286b55;
 }
 
+.operations-report {
+  display: grid;
+  gap: 18px;
+}
+
+.operations-report > .page-heading {
+  margin-bottom: 0;
+}
+
+.report-as-of {
+  flex: 0 0 auto;
+  color: #73838d;
+  font-size: 10px;
+}
+
+.operations-metric-grid .metric-card {
+  min-height: 112px;
+}
+
+.operations-report-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.report-list {
+  display: grid;
+  margin: 0;
+  padding: 0 19px 14px;
+}
+
+.report-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border-top: 1px solid #edf0f2;
+  padding: 10px 0;
+  font-size: 10px;
+}
+
+.report-list dt {
+  color: #6d7d88;
+}
+
+.report-list dd {
+  margin: 0;
+  color: #263f51;
+  font-weight: 700;
+}
+
+.report-gap-tags,
+.report-export-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 19px 18px;
+}
+
+.report-gap-tags span {
+  border: 1px solid #e6eaed;
+  border-radius: 6px;
+  background: #f7f9fa;
+  color: #63737f;
+  padding: 7px 9px;
+  font-size: 10px;
+}
+
+.report-export-actions .button {
+  text-transform: capitalize;
+}
+
 .access-management {
   display: grid;
   gap: 20px;
@@ -1711,6 +1782,38 @@ h3 {
   overflow: hidden;
 }
 
+.access-user-tools {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #edf0f2;
+  padding: 14px 18px;
+}
+
+.access-user-search input {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #dfe6e9;
+  border-radius: 6px;
+  background: #fff;
+  color: #344c5d;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+
+.access-user-search input::placeholder {
+  color: #a1abb3;
+}
+
+.access-user-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.access-user-filters .button {
+  text-transform: capitalize;
+}
+
 .access-user-list {
   display: grid;
 }
@@ -1721,6 +1824,13 @@ h3 {
   gap: 12px;
   border-top: 1px solid #edf0f2;
   padding: 14px 18px;
+}
+
+.access-user-pagination {
+  display: flex;
+  justify-content: center;
+  border-top: 1px solid #edf0f2;
+  padding: 14px;
 }
 
 .access-user-avatar {
@@ -1913,6 +2023,15 @@ h3 {
     display: flex;
     gap: 5px;
     overflow-x: auto;
+  }
+
+  .operations-report-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .operations-report > .page-heading {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .nav-item {

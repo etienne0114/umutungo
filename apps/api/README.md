@@ -28,7 +28,7 @@ The initial demonstration rules mark recorded `critical` condition as critical; 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | Process health |
-| `GET` | `/api/v1/admin/users` | Admin-only list of registered account summaries |
+| `GET` | `/api/v1/admin/users` | Admin-only list of registered account summaries; supports `page` and `per_page` (maximum 100) |
 | `PUT` | `/api/v1/admin/users/{user_id}/access` | Admin-only approve/revoke action for a confirmed account |
 | `POST` | `/api/v1/assets` | Register an asset |
 | `GET` | `/api/v1/assets` | List assets; optionally filter with `?active=true` |
@@ -45,8 +45,14 @@ The initial demonstration rules mark recorded `critical` condition as critical; 
 | `GET` | `/api/v1/recommendations/{recommendation_id}` | Read a recommendation and its captured asset snapshot |
 | `POST` | `/api/v1/recommendations/{recommendation_id}/events` | Append a review disposition or verified outcome |
 | `GET` | `/api/v1/recommendations/{recommendation_id}/events` | Read the append-only recommendation event history |
+| `GET` | `/api/v1/reports/operations` | View asset data coverage, service due counts, rule-based risk totals, maintenance counts and recorded downtime |
+| `GET` | `/api/v1/exports/assets.csv` | Export up to 10,000 asset register rows |
+| `GET` | `/api/v1/exports/maintenance.csv` | Export up to 10,000 maintenance rows |
+| `GET` | `/api/v1/exports/inspections.csv` | Export up to 10,000 inspection rows |
 
-Run generation snapshots the current asset fields and rule output so later changes do not rewrite the recommendation. Review events require a disposition and reason; outcome events require an outcome type and event date. The prototype API exposes no update/delete operation for these records. Actor identity is not captured until authentication is implemented.
+Run generation snapshots the current asset fields and rule output so later changes do not rewrite the recommendation. Review events require a disposition and reason; outcome events require an outcome type and event date. The prototype API exposes no update/delete operation for these records. Recommendation event actor identity is not yet captured.
+
+The operations report explicitly lists fields and governance boundaries the current data model does not capture. It is descriptive only: recorded downtime is not availability, and rule-based risk totals are not model predictions. CSV exports are available to approved API users, escape spreadsheet formula-leading values, and reject datasets over 10,000 rows rather than silently truncating them. Do not use exports with institutional records until the institution-level access, privacy and audit controls are approved.
 
 ## Hosted development
 
@@ -75,7 +81,7 @@ The Alembic default is local SQLite. Use `DATABASE_URL` to override it. Never ru
 
 The requested initial administrator is `etiennetuyihamye@gmail.com`. Its trusted Supabase `app_metadata` contains `govasset_access=approved` and `govasset_role=admin`. After provisioning or changing trusted claims, the user must sign out and sign back in to receive a token with the new claims.
 
-Administrators can review email-confirmed accounts in the web app's **User access** view. Newly registered users remain pending; only email-confirmed accounts can be approved. The API uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to manage Auth users. Keep that value only in Render's private environment (or a secured operator env file); never put it in `NEXT_PUBLIC_*`, frontend configuration, source control, or browser code. To promote the initial administrator manually, run `python scripts/promote_admin.py --email etiennetuyihamye@gmail.com` from `apps/api` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set in the process environment. The script requires the account to exist and have confirmed its email, preserves unrelated app metadata, and does not set a password.
+Administrators can review registered accounts in the web app's **User access** view, search/filter loaded users, and load additional pages of up to 100 accounts. Newly registered users remain pending; only email-confirmed accounts can be approved. After approval, a user must sign out and back in to refresh their token claims before API access works. Revocation updates trusted metadata, but an already-issued access token may remain valid until it expires or refreshes. The API uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to manage Auth users. Keep that value only in Render's private environment (or a secured operator env file); never put it in `NEXT_PUBLIC_*`, frontend configuration, source control, or browser code. To promote the initial administrator manually, run `python scripts/promote_admin.py --email etiennetuyihamye@gmail.com` from `apps/api` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set in the process environment. The script requires the account to exist and have confirmed its email, preserves unrelated app metadata, and does not set a password.
 
 ### Render deployment
 

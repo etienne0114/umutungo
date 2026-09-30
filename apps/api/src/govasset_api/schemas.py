@@ -207,3 +207,27 @@ class AdminUserRead(BaseModel):
 
 class AdminAccessUpdate(BaseModel):
     approved: bool
+
+
+class OperationsReport(BaseModel):
+    generated_on: date
+    total_assets: int
+    active_assets: int
+    inactive_assets: int
+    condition_recorded_assets: int
+    condition_unknown_assets: int
+    missing_acquisition_date: int
+    missing_inspection_date: int
+    missing_service_schedule: int
+    inconsistent_service_dates: int
+    assets_with_maintenance_history: int
+    inspection_records: int
+    maintenance_records: int
+    service_due_assets: int
+    overdue_service_assets: int
+    risk_counts: dict[str, int]
+    planned_maintenance_records: int
+    unplanned_maintenance_records: int
+    downtime_hours_recorded: float
+    maintenance_records_without_downtime: int
+    untracked_domains: list[str]

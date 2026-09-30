@@ -29,6 +29,8 @@ Registration requires email confirmation in the current Supabase project. New an
 
 Signed-in users can edit their name, organization, department, and phone from the profile panel. These personal details are stored in the user's Supabase Auth `user_metadata`; only that user's own metadata can be changed from the browser. Access approval remains in trusted `app_metadata` and cannot be changed through the profile form.
 
-Users with the trusted `app_metadata.govasset_role=admin` claim see a **User access** view. New accounts remain pending until an administrator approves them after email confirmation. The Supabase service-role key is server-only and must never be added to this frontend or any `NEXT_PUBLIC_*` setting.
+Users with the trusted `app_metadata.govasset_role=admin` claim see a **User access** view. Administrators can search and filter registered accounts, load all account pages, approve confirmed users, and revoke access from other accounts. New accounts remain pending until an administrator approves them after email confirmation. After approval, users must sign out and back in to refresh their token claims before the API will grant access. The Supabase service-role key is server-only and must never be added to this frontend or any `NEXT_PUBLIC_*` setting.
+
+The **Data quality** view summarizes asset-field coverage, service due counts, saved inspection/maintenance history, rule-based triage counts and recorded downtime. It also identifies roadmap data not captured by the application; it does not infer asset health or claim predictive performance. Approved users can export the existing asset, inspection and maintenance rows as CSV (up to 10,000 rows per export).
 
 The frontend is currently available at `https://umutungo7.vercel.app`. The shorter `https://umutungo.vercel.app` alias is already in use by another Vercel deployment. Never paste access tokens into chat or commit them to this repository.

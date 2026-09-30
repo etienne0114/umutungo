@@ -8,6 +8,7 @@ import type {
   MaintenanceCreate,
   MaintenanceRecord,
   Outcome,
+  OperationsReport,
   Recommendation,
   RecommendationEvent,
   RiskLevel,
@@ -68,6 +69,48 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
+async function downloadCsv(dataset: "assets" | "maintenance" | "inspections") {
+  const headers: Record<string, string> = {};
+  if (supabaseIsConfigured()) {
+    const { data, error } = await getSupabaseBrowserClient().auth.getSession();
+    if (error) throw error;
+    if (!data.session) throw new Error("Your session has expired. Sign in again.");
+    headers.Authorization = `******`;
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/api/v1/exports/${dataset}.csv`, {
+      headers,
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error(
+      `Could not complete the API request at ${API_BASE_URL}. Check the API address, network connection, and that this frontend origin is allowed by the API's CORS_ORIGINS.`,
+    );
+  }
+
+  if (!response.ok) {
+    const payload: unknown = await response.json().catch(() => null);
+    const detail =
+      typeof payload === "object" && payload !== null && "detail" in payload
+        ? payload.detail
+        : null;
+    throw new Error(
+      typeof detail === "string" ? detail : `Export failed (${response.status}).`,
+    );
+  }
+
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `umutungo-${dataset}.csv`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function queryString(values: Record<string, string | number | undefined>) {
   const params = new URLSearchParams();
   Object.entries(values).forEach(([key, value]) => {
@@ -78,7 +121,10 @@ function queryString(values: Record<string, string | number | undefined>) {
 }
 
 export const api = {
-  listAdminUsers: () => request<AdminUser[]>("/api/v1/admin/users"),
+  getOperationsReport: () => request<OperationsReport>("/api/v1/reports/operations"),
+  downloadCsv,
+  listAdminUsers: (page = 1, perPage = 100) =>
+    request<AdminUser[]>(`/api/v1/admin/users${queryString({ page, per_page: perPage })}`),
   setUserAccess: (userId: string, approved: boolean) =>
     request<AdminUser>(`/api/v1/admin/users/${encodeURIComponent(userId)}/access`, {
       method: "PUT",

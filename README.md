@@ -1,6 +1,6 @@
 # Umutungo
 
-**Status:** Frontend is available on Vercel; Render API is not healthy yet
+**Status:** Frontend is available on Vercel; the Render API is live for the local pilot
 **Purpose:** Help public-sector maintenance teams prioritize inspections and planned work using existing asset and maintenance data. The product is decision support; authorized people retain operational authority.
 
 ## Start here
@@ -24,6 +24,8 @@ The platform must complement—not replace or duplicate—official asset, fleet,
 ## Current maturity
 
 This repository contains the project definition, a local API prototype, and a Next.js dashboard. The frontend is deployed to Vercel at `https://umutungo7.vercel.app` and supports invitation-only Supabase sign-in; hosted API requests verify Supabase access tokens and require an administrator-approved account. The Render Python service is configured at `https://umutungo.onrender.com`; its database connection must use the Supabase Session Pooler (IPv4) for Render to reach PostgreSQL. The product does not run AI models and is not approved for operational data or network deployment.
+
+The dashboard includes asset history, rule-based maintenance triage, recommendation review, administrator-managed access, descriptive data-quality/operations reporting and bounded CSV exports. Usage readings, costs, parts, work-order status, source import lineage, tenant isolation and predictive modeling remain unimplemented or gated on institutional discovery, approved data and governance.
 
 ## Source-of-truth policy
 

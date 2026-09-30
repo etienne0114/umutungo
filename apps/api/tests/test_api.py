@@ -39,6 +39,73 @@ def test_create_asset_and_reject_duplicate_code(client):
     assert create_asset(client).status_code == 409
 
 
+def test_operations_report_exposes_data_gaps_and_operational_totals(client):
+    create_asset(
+        client,
+        asset_code="DATA-001",
+        condition="good",
+        last_service_date="2026-01-01",
+        next_service_due="2026-02-01",
+    )
+    inactive = create_asset(
+        client,
+        asset_code="DATA-002",
+        active=False,
+        condition="unknown",
+    )
+    asset_id = inactive.json()["id"]
+    client.post(
+        f"/api/v1/assets/{asset_id}/maintenance",
+        json={
+            "event_date": "2026-03-01",
+            "category": "repair",
+            "planned": False,
+            "downtime_hours": 2.5,
+        },
+    )
+
+    response = client.get("/api/v1/reports/operations?as_of=2026-09-30")
+
+    assert response.status_code == 200
+    report = response.json()
+    assert report["total_assets"] == 2
+    assert report["active_assets"] == 1
+    assert report["inactive_assets"] == 1
+    assert report["condition_unknown_assets"] == 1
+    assert report["overdue_service_assets"] == 1
+    assert report["unplanned_maintenance_records"] == 1
+    assert report["downtime_hours_recorded"] == 2.5
+    assert "maintenance costs" in report["untracked_domains"]
+
+
+def test_csv_exports_have_headers_and_prevent_spreadsheet_formula_injection(client):
+    create_asset(
+        client,
+        asset_code="=HYPERLINK(\"https://example.org\")",
+    )
+
+    response = client.get("/api/v1/exports/assets.csv")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/csv")
+    assert 'filename="umutungo-assets.csv"' in response.headers["content-disposition"]
+    assert "'=HYPERLINK" in response.text
+    assert response.text.splitlines()[0].startswith("asset_code,asset_type")
+
+
+def test_csv_export_rejects_more_than_the_safe_row_limit(client, monkeypatch):
+    from govasset_api import reporting
+
+    monkeypatch.setattr(reporting, "MAX_EXPORT_ROWS", 1)
+    create_asset(client, asset_code="EXPORT-001")
+    create_asset(client, asset_code="EXPORT-002")
+
+    response = client.get("/api/v1/exports/assets.csv")
+
+    assert response.status_code == 413
+    assert "Narrow the dataset" in response.json()["detail"]
+
+
 def test_cors_allows_project_preview_origins_but_not_other_vercel_projects(
     monkeypatch,
 ):
@@ -528,8 +595,10 @@ def test_admin_user_listing_requires_admin_role(client, monkeypatch):
         "app_metadata": {"govasset_access": "approved"},
     }
     monkeypatch.setattr(
-        "govasset_api.main.list_supabase_users",
-        lambda: pytest.fail("Non-admin users must not reach the Supabase admin API."),
+        "govasset_api.main.list_supabase_users_page",
+        lambda **_kwargs: pytest.fail(
+            "Non-admin users must not reach the Supabase admin API."
+        ),
     )
 
     response = client.get("/api/v1/admin/users")
@@ -557,7 +626,13 @@ def test_admin_can_list_users_and_approve_confirmed_accounts(client, monkeypatch
         "app_metadata": {"provider": "email", "govasset_access": "pending"},
         "user_metadata": {"full_name": "Staff Member", "organization": "Health"},
     }
-    monkeypatch.setattr("govasset_api.main.list_supabase_users", lambda: [user])
+    requested_page = {}
+
+    def list_users_page(*, page, per_page):
+        requested_page.update(page=page, per_page=per_page)
+        return [user]
+
+    monkeypatch.setattr("govasset_api.main.list_supabase_users_page", list_users_page)
     monkeypatch.setattr("govasset_api.main.get_supabase_user", lambda _user_id: user)
 
     def update_user_app_metadata(user_id, metadata):
@@ -573,13 +648,14 @@ def test_admin_can_list_users_and_approve_confirmed_accounts(client, monkeypatch
         update_user_app_metadata,
     )
 
-    listed = client.get("/api/v1/admin/users")
+    listed = client.get("/api/v1/admin/users?page=2&per_page=50")
     updated = client.put(
         "/api/v1/admin/users/245f7915-1c43-43d9-a63e-e40131024452/access",
         json={"approved": True},
     )
 
     assert listed.status_code == 200
+    assert requested_page == {"page": 2, "per_page": 50}
     assert listed.json()[0]["access"] == "pending"
     assert listed.json()[0]["role"] == "user"
     assert listed.json()[0]["full_name"] == "Staff Member"
@@ -638,3 +714,46 @@ def test_admin_cannot_approve_unconfirmed_account(client, monkeypatch):
 
     assert response.status_code == 409
     assert response.json()["detail"] == "Users must confirm their email before approval."
+
+
+def test_admin_user_pagination_rejects_out_of_range_page_size(client, monkeypatch):
+    from govasset_api import auth
+
+    client.app.dependency_overrides[auth.require_authenticated_user] = lambda: {
+        "sub": "admin-123",
+        "app_metadata": {
+            "govasset_access": "approved",
+            "govasset_role": "admin",
+        },
+    }
+    monkeypatch.setattr(
+        "govasset_api.main.list_supabase_users_page",
+        lambda **_kwargs: pytest.fail("Invalid page size must not call Supabase."),
+    )
+
+    response = client.get("/api/v1/admin/users?page=1&per_page=101")
+
+    assert response.status_code == 422
+
+
+def test_supabase_admin_user_pages_request_the_requested_page(monkeypatch):
+    from govasset_api import supabase_admin
+
+    requested = []
+    monkeypatch.setattr(
+        supabase_admin,
+        "_admin_request",
+        lambda path: requested.append(path) or {"users": [{"id": "page-user"}]},
+    )
+
+    users = supabase_admin.list_supabase_users_page(page=3, per_page=25)
+
+    assert users == [{"id": "page-user"}]
+    assert requested == ["users?page=3&per_page=25"]
+
+
+def test_supabase_admin_page_size_is_bounded():
+    from govasset_api import supabase_admin
+
+    with pytest.raises(ValueError, match="cannot exceed 100"):
+        supabase_admin.list_supabase_users_page(page=1, per_page=101)

@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, status
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import Engine, func, select
 from sqlalchemy.exc import IntegrityError
@@ -25,6 +25,11 @@ from govasset_api.models import (
     RecommendationEvent,
     TriageRun,
 )
+from govasset_api.reporting import (
+    bounded_export_rows,
+    build_operations_report,
+    render_csv,
+)
 from govasset_api.schemas import (
     AssetCreate,
     AssetRead,
@@ -34,6 +39,7 @@ from govasset_api.schemas import (
     InspectionRead,
     MaintenanceCreate,
     MaintenanceRead,
+    OperationsReport,
     RecommendationEventCreate,
     RecommendationEventRead,
     RecommendationRead,
@@ -45,7 +51,7 @@ from govasset_api.triage import RULE_VERSION, assess_asset
 from govasset_api.supabase_admin import (
     SupabaseAdminError,
     get_supabase_user,
-    list_supabase_users,
+    list_supabase_users_page,
     update_supabase_user_app_metadata,
 )
 
@@ -100,14 +106,135 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         return {"status": "ok"}
 
     @api.get(
+        "/reports/operations",
+        response_model=OperationsReport,
+        tags=["reports"],
+    )
+    def operations_report(
+        as_of: date | None = Query(default=None, description="Report date; defaults to today."),
+        session: Session = Depends(get_session),
+    ):
+        return build_operations_report(session, as_of or date.today())
+
+    @api.get("/exports/assets.csv", tags=["exports"])
+    def export_assets(session: Session = Depends(get_session)):
+        try:
+            rows = bounded_export_rows(
+                session,
+                select(
+                    Asset.asset_code,
+                    Asset.asset_type,
+                    Asset.make,
+                    Asset.model,
+                    Asset.acquisition_date,
+                    Asset.condition,
+                    Asset.active,
+                    Asset.last_inspected_on,
+                    Asset.last_service_date,
+                    Asset.next_service_due,
+                    Asset.created_at,
+                ).order_by(Asset.asset_code),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        content = render_csv(
+            [
+                "asset_code",
+                "asset_type",
+                "make",
+                "model",
+                "acquisition_date",
+                "condition",
+                "active",
+                "last_inspected_on",
+                "last_service_date",
+                "next_service_due",
+                "created_at",
+            ],
+            [tuple(row) for row in rows],
+        )
+        return Response(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="umutungo-assets.csv"'},
+        )
+
+    @api.get("/exports/maintenance.csv", tags=["exports"])
+    def export_maintenance(session: Session = Depends(get_session)):
+        try:
+            rows = bounded_export_rows(
+                session,
+                select(
+                    Asset.asset_code,
+                    MaintenanceRecord.event_date,
+                    MaintenanceRecord.category,
+                    MaintenanceRecord.description,
+                    MaintenanceRecord.planned,
+                    MaintenanceRecord.downtime_hours,
+                    MaintenanceRecord.created_at,
+                )
+                .join(Asset, MaintenanceRecord.asset_id == Asset.id)
+                .order_by(MaintenanceRecord.event_date, MaintenanceRecord.id),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        content = render_csv(
+            [
+                "asset_code",
+                "event_date",
+                "category",
+                "description",
+                "planned",
+                "downtime_hours",
+                "created_at",
+            ],
+            [tuple(row) for row in rows],
+        )
+        return Response(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="umutungo-maintenance.csv"'},
+        )
+
+    @api.get("/exports/inspections.csv", tags=["exports"])
+    def export_inspections(session: Session = Depends(get_session)):
+        try:
+            rows = bounded_export_rows(
+                session,
+                select(
+                    Asset.asset_code,
+                    InspectionRecord.inspected_on,
+                    InspectionRecord.condition,
+                    InspectionRecord.observations,
+                    InspectionRecord.created_at,
+                )
+                .join(Asset, InspectionRecord.asset_id == Asset.id)
+                .order_by(InspectionRecord.inspected_on, InspectionRecord.id),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=413, detail=str(exc)) from exc
+        content = render_csv(
+            ["asset_code", "inspected_on", "condition", "observations", "created_at"],
+            [tuple(row) for row in rows],
+        )
+        return Response(
+            content,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": 'attachment; filename="umutungo-inspections.csv"'},
+        )
+
+    @api.get(
         "/admin/users",
         response_model=list[AdminUserRead],
         tags=["administration"],
         dependencies=[Depends(require_admin_user)],
     )
-    def list_users():
+    def list_users(
+        page: int = Query(default=1, ge=1),
+        per_page: int = Query(default=100, ge=1, le=100),
+    ):
         try:
-            users = list_supabase_users()
+            users = list_supabase_users_page(page=page, per_page=per_page)
         except SupabaseAdminError as exc:
             detail = str(exc)
             code = (

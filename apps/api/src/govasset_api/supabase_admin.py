@@ -46,15 +46,22 @@ def _admin_request(path: str, method: str = "GET", payload: dict[str, Any] | Non
         raise SupabaseAdminError("Supabase administrator API returned invalid JSON.") from exc
 
 
+def list_supabase_users_page(page: int = 1, per_page: int = 100) -> list[dict[str, Any]]:
+    if page < 1 or per_page < 1 or per_page > 100:
+        raise ValueError("Supabase user-list page must be positive and per_page cannot exceed 100.")
+    response = _admin_request(f"users?page={page}&per_page={per_page}")
+    page_users = response.get("users") if isinstance(response, dict) else None
+    if not isinstance(page_users, list):
+        raise SupabaseAdminError("Supabase administrator API returned an invalid user list.")
+    return [user for user in page_users if isinstance(user, dict)]
+
+
 def list_supabase_users(limit: int = 1000) -> list[dict[str, Any]]:
     users: list[dict[str, Any]] = []
     per_page = 100
     for page in range(1, (limit + per_page - 1) // per_page + 1):
-        response = _admin_request(f"users?page={page}&per_page={per_page}")
-        page_users = response.get("users") if isinstance(response, dict) else None
-        if not isinstance(page_users, list):
-            raise SupabaseAdminError("Supabase administrator API returned an invalid user list.")
-        users.extend(user for user in page_users if isinstance(user, dict))
+        page_users = list_supabase_users_page(page=page, per_page=per_page)
+        users.extend(page_users)
         if len(page_users) < per_page or len(users) >= limit:
             break
     return users[:limit]

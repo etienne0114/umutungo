@@ -14,6 +14,7 @@ import type { User } from "@supabase/supabase-js";
 import { Icon, IconName } from "@/components/icons";
 import { AccessManagement } from "@/features/admin/access-management";
 import { ProfilePanel, avatarInitials } from "@/features/profile/profile-panel";
+import { OperationsReportView } from "@/features/reports/operations-report";
 import { api } from "@/lib/api/client";
 import type {
   Asset,
@@ -29,12 +30,13 @@ import type {
   TriageItem,
 } from "@/lib/api/types";
 
-type View = "overview" | "assets" | "recommendations" | "users";
+type View = "overview" | "assets" | "recommendations" | "reports" | "users";
 
 const navigation: { id: Exclude<View, "users">; label: string; icon: IconName }[] = [
   { id: "overview", label: "Overview", icon: "overview" },
   { id: "assets", label: "Asset register", icon: "assets" },
   { id: "recommendations", label: "Recommendations", icon: "recommendations" },
+  { id: "reports", label: "Data quality", icon: "reports" },
 ];
 
 const riskOrder: RiskLevel[] = ["critical", "high", "medium", "low", "insufficient_data"];
@@ -336,7 +338,9 @@ export function Dashboard({
                   ? "Asset register"
                   : view === "recommendations"
                     ? "Recommendations"
-                    : "User access"}
+                      : view === "reports"
+                        ? "Data quality"
+                        : "User access"}
             </strong>
           </div>
           <div className="topbar-actions">
@@ -434,6 +438,7 @@ export function Dashboard({
             />
           )}
           {view === "users" && isAdmin && <AccessManagement currentUserId={user.id} />}
+          {view === "reports" && <OperationsReportView />}
         </div>
       </main>
 
