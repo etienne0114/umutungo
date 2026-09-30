@@ -28,6 +28,12 @@ If Next.js selects another local port, add that exact localhost origin too. The 
 
 If the email confirmation template builds a custom link from `{{ .SiteURL }}`, change it to use `{{ .RedirectTo }}` so it honors the local callback requested during registration. Keep the action URL secure by retaining Supabase's `{{ .ConfirmationURL }}` flow.
 
+### Registration email delivery and rate limits
+
+Supabase's built-in email provider is for testing only: it sends at most two Auth emails per project per hour across sign-up, recovery, and other Auth email flows. Local and production environments share that project-wide quota. When it is reached, registration cannot deliver a confirmation email; retrying the form will not bypass the limit. The app now identifies this response and explains that an account may be pending rather than showing a raw provider error.
+
+For production, configure a transactional SMTP provider (for example Resend, AWS SES, or Postmark) in Supabase Dashboard → Authentication → SMTP Settings. Verify the sending domain and SPF/DKIM records with that provider, keep email confirmation enabled, then set an appropriate project email-send limit in Authentication → Rate Limits. Supabase applies a conservative limit to newly configured SMTP; increase it only after the provider account and sending domain are ready. SMTP host, username, and password belong only in Supabase's SMTP settings—never in this repository, Vercel, or browser environment variables.
+
 ## Vercel
 
 Create the Vercel project with the repository root directory set to `apps/web`. Add these environment variables for each environment that should be deployed:

@@ -1273,6 +1273,11 @@ h3 {
   text-decoration: underline;
 }
 
+.auth-link:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .auth-link.inline {
   padding: 0;
 }

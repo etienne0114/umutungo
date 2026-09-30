@@ -5,8 +5,34 @@ import type { AuthChangeEvent, AuthError, Session, User } from "@supabase/supaba
 import { getSupabaseBrowserClient, supabaseIsConfigured } from "@/lib/supabase/client";
 
 type AuthStatus = "loading" | "signed_out" | "signed_in" | "misconfigured";
-type AuthMode = "sign_in" | "register" | "reset_password" | "update_password" | "check_email";
+type AuthMode =
+  | "sign_in"
+  | "register"
+  | "reset_password"
+  | "update_password"
+  | "check_email"
+  | "email_rate_limited";
 const approvalRequired = process.env.NEXT_PUBLIC_AUTH_REQUIRED !== "false";
+
+function getSignupRateLimit(error: unknown): "email" | "requests" | null {
+  if (typeof error !== "object" || error === null) return null;
+
+  const status = "status" in error ? error.status : undefined;
+  const code =
+    "code" in error && typeof error.code === "string" ? error.code : "";
+  const message =
+    error instanceof Error ? error.message.toLowerCase() : "";
+
+  if (
+    code === "over_email_send_rate_limit" ||
+    (status === 429 && /email.*rate limit|rate limit.*email/.test(message))
+  ) {
+    return "email";
+  }
+  return status === 429 || code === "over_request_rate_limit"
+    ? "requests"
+    : null;
+}
 
 export function AuthGate({
   children,
@@ -139,8 +165,19 @@ export function AuthGate({
         setAuthMessage(`Check ${email} for the confirmation link, then sign in. API access requires administrator approval.`);
       }
     } catch (error) {
+      const rateLimit = getSignupRateLimit(error);
+      if (rateLimit === "email") {
+        setMode("email_rate_limited");
+        setAuthMessage("");
+        setSignInError("");
+        return;
+      }
       setSignInError(
-        error instanceof Error ? error.message : "Account registration failed. Please try again.",
+        rateLimit === "requests"
+          ? "There have been too many registration attempts. Please wait a few minutes before trying again."
+          : error instanceof Error
+            ? error.message
+            : "Account registration failed. Please try again.",
       );
     } finally {
       setBusy(false);
@@ -278,6 +315,38 @@ export function AuthGate({
     );
   }
 
+  if (mode === "email_rate_limited") {
+    return (
+      <main className="auth-screen">
+        <section className="auth-card">
+          <BrandMark />
+          <div className="eyebrow">EMAIL DELIVERY DELAYED</div>
+          <h1>We couldn&apos;t send your confirmation yet</h1>
+          <p role="alert">
+            Umutungo&apos;s email service has reached its sending limit. Your registration may
+            have created a pending account, but the confirmation email was not delivered.
+          </p>
+          <p className="auth-footnote">
+            Please don&apos;t repeatedly submit the form. Wait up to an hour, then try signing in
+            with the same email address. Reliable registration requires the project
+            administrator to configure a production email provider in Supabase.
+          </p>
+          <button
+            className="button button-primary auth-submit"
+            onClick={() => {
+              setMode("sign_in");
+              setSignInError("");
+              setAuthMessage("");
+            }}
+            type="button"
+          >
+            Back to sign in
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   if (
     approvalRequired &&
     status === "signed_in" &&
@@ -334,7 +403,7 @@ export function AuthGate({
                 {busy ? "Sending…" : "Send reset link"}
               </button>
             </form>
-            <button className="auth-link" onClick={() => {
+            <button className="auth-link" disabled={busy} onClick={() => {
               setMode("sign_in");
               setSignInError("");
             }} type="button">Back to sign in</button>
@@ -407,7 +476,7 @@ export function AuthGate({
           )}
           <p className="auth-footnote">
             {mode === "register" ? "Registration does not grant API access automatically." : "New here?"}{" "}
-            <button className="auth-link inline" onClick={() => {
+            <button className="auth-link inline" disabled={busy} onClick={() => {
               setMode(mode === "register" ? "sign_in" : "register");
               setSignInError("");
               setAuthMessage("");
