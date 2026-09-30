@@ -118,6 +118,9 @@ export function AccessManagement({ currentUserId }: { currentUserId: string }) {
   const pendingCount = users.filter(
     (user) => user.access === "pending" && user.email_confirmed_at,
   ).length;
+  const unconfirmedPendingCount = users.filter(
+    (user) => user.access === "pending" && !user.email_confirmed_at,
+  ).length;
   const visibleUsers = users.filter((user) => {
     const normalizedSearch = search.trim().toLowerCase();
     const matchesSearch =
@@ -160,6 +163,15 @@ export function AccessManagement({ currentUserId }: { currentUserId: string }) {
           <strong>{pendingCount}</strong>
         </div>
       </div>
+      {pendingCount === 0 && unconfirmedPendingCount > 0 && (
+        <div className="feedback-banner error-banner" role="status">
+          <Icon name="warning" />
+          <span>
+            {unconfirmedPendingCount} pending account{unconfirmedPendingCount === 1 ? "" : "s"}{" "}
+            must confirm email before an administrator can approve API access.
+          </span>
+        </div>
+      )}
 
       <section className="panel access-users-panel">
         <div className="panel-heading">
@@ -204,55 +216,62 @@ export function AccessManagement({ currentUserId }: { currentUserId: string }) {
                 <p>Clear the search or load more accounts to continue reviewing.</p>
               </div>
             ) : (
-                  <div className="access-user-list">
+              <div className="access-user-list">
                 {visibleUsers.map((user) => {
-                      const isCurrentAdmin = user.id === currentUserId;
-                      return (
-                        <article className="access-user-row" key={user.id}>
-                          <div className="access-user-avatar">
-                            {(user.full_name || user.email || "U").slice(0, 1).toUpperCase()}
-                          </div>
-                          <div className="access-user-identity">
-                            <strong>{user.full_name || user.email || "Unnamed user"}</strong>
-                            <span>{user.email ?? "No email"}</span>
-                            <small>
-                              {user.organization ? `${user.organization} · ` : ""}
-                              Registered {formatDate(user.created_at)}
-                              {user.email_confirmed_at ? " · Email verified" : " · Email not verified"}
-                              {user.last_sign_in_at ? ` · Last sign-in ${formatDate(user.last_sign_in_at)}` : ""}
-                            </small>
-                          </div>
-                          <div className="access-user-state">
-                            {user.role === "admin" && <span className="access-badge approved">Admin</span>}
-                            <span className={`access-badge ${user.access === "approved" ? "approved" : "pending"}`}>
-                              {user.access === "approved" ? "Approved" : "Pending"}
-                            </span>
-                          </div>
-                          <div className="access-user-action">
-                            {user.access === "pending" ? (
-                              <button
-                                className="button button-primary"
-                                disabled={Boolean(busyUserId) || !user.email_confirmed_at}
-                                onClick={() => void setAccess(user, true)}
-                                title={user.email_confirmed_at ? "Approve API access" : "Email confirmation is required first"}
-                                type="button"
-                              >
-                                {busyUserId === user.id ? "Saving…" : "Approve"}
-                              </button>
-                            ) : (
-                              <button
-                                className="button button-secondary"
-                                disabled={Boolean(busyUserId) || isCurrentAdmin}
-                                onClick={() => void setAccess(user, false)}
-                                title={isCurrentAdmin ? "You cannot revoke your own access" : "Revoke API access"}
-                                type="button"
-                              >
-                                {busyUserId === user.id ? "Saving…" : isCurrentAdmin ? "Current admin" : "Revoke"}
-                              </button>
+                  const isCurrentAdmin = user.id === currentUserId;
+                  return (
+                    <article className="access-user-row" key={user.id}>
+                      <div className="access-user-avatar">
+                        {(user.full_name || user.email || "U").slice(0, 1).toUpperCase()}
+                      </div>
+                      <div className="access-user-identity">
+                        <strong>{user.full_name || user.email || "Unnamed user"}</strong>
+                        <span>{user.email ?? "No email"}</span>
+                        <small>
+                          {user.organization ? `${user.organization} · ` : ""}
+                          Registered {formatDate(user.created_at)}
+                          {user.email_confirmed_at ? " · Email verified" : " · Email not verified"}
+                          {user.last_sign_in_at ? ` · Last sign-in ${formatDate(user.last_sign_in_at)}` : ""}
+                        </small>
+                      </div>
+                      <div className="access-user-state">
+                        {user.role === "admin" && <span className="access-badge approved">Admin</span>}
+                        <span className={`access-badge ${user.access === "approved" ? "approved" : "pending"}`}>
+                          {user.access === "approved" ? "Approved" : "Pending"}
+                        </span>
+                      </div>
+                      <div className="access-user-action">
+                        {user.access === "pending" ? (
+                          <>
+                            <button
+                              className="button button-primary"
+                              disabled={Boolean(busyUserId) || !user.email_confirmed_at}
+                              onClick={() => void setAccess(user, true)}
+                              title={user.email_confirmed_at ? "Approve API access" : "Email confirmation is required first"}
+                              type="button"
+                            >
+                              {busyUserId === user.id ? "Saving…" : "Approve"}
+                            </button>
+                            {!user.email_confirmed_at && (
+                              <small className="access-user-requirement">
+                                Confirm email before approval
+                              </small>
                             )}
-                          </div>
-                        </article>
-                      );
+                          </>
+                        ) : (
+                          <button
+                            className="button button-secondary"
+                            disabled={Boolean(busyUserId) || isCurrentAdmin}
+                            onClick={() => void setAccess(user, false)}
+                            title={isCurrentAdmin ? "You cannot revoke your own access" : "Revoke API access"}
+                            type="button"
+                          >
+                            {busyUserId === user.id ? "Saving…" : isCurrentAdmin ? "Current admin" : "Revoke"}
+                          </button>
+                        )}
+                      </div>
+                    </article>
+                  );
                 })}
               </div>
             )}

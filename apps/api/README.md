@@ -10,10 +10,10 @@ From this directory:
 python -m venv .venv
 . .venv/bin/activate
 python -m pip install -e '.[dev]'
-uvicorn govasset_api.main:app --reload --host 127.0.0.1 --port 8000 --env-file .env.local
+uvicorn govasset_api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The API explicitly loads `apps/api/.env.local` for local development. This local-only config uses SQLite and sets `AUTH_REQUIRED=false`; it avoids writing test records to the hosted Supabase database. The web frontend still signs in through Supabase, but the local API skips bearer-token enforcement. Never use this configuration for a deployed service or put production data in this local prototype. The separate `apps/api/.env` file is not loaded by this command.
+From the API directory, Uvicorn automatically loads `apps/api/.env.local` during local startup; application environment variables already set in the shell take precedence. The loader is disabled for Render (`RENDER_SERVICE_ID`) and production (`APP_ENV=production`). Keep this file ignored by git. The API `.env` file is not loaded automatically. Set `SUPABASE_URL` to the same Supabase project used by `apps/web/.env.local`. Use a local SQLite database for isolated test records, or deliberately configure the Supabase PostgreSQL pooler if you intend to use shared development data. Keep `AUTH_REQUIRED=true` when testing real sign-in and approval claims; use `AUTH_REQUIRED=false` only for isolated local development where authentication is intentionally disabled. Never use development settings for a deployed service.
 
 To use a different local database, change `DATABASE_URL` in `.env.local`. Browser requests from the two localhost Next.js origins are allowed by default; configure `CORS_ORIGINS` as a comma-separated exact-origin allowlist for other local frontend origins.
 
@@ -82,6 +82,8 @@ The Alembic default is local SQLite. Use `DATABASE_URL` to override it. Never ru
 The requested initial administrator is `etiennetuyihamye@gmail.com`. Its trusted Supabase `app_metadata` contains `govasset_access=approved` and `govasset_role=admin`. After provisioning or changing trusted claims, the user must sign out and sign back in to receive a token with the new claims.
 
 Administrators can review registered accounts in the web app's **User access** view, search/filter loaded users, and load additional pages of up to 100 accounts. Newly registered users remain pending; only email-confirmed accounts can be approved. After approval, a user must sign out and back in to refresh their token claims before API access works. Revocation updates trusted metadata, but an already-issued access token may remain valid until it expires or refreshes. The API uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to manage Auth users. Keep that value only in Render's private environment (or a secured operator env file); never put it in `NEXT_PUBLIC_*`, frontend configuration, source control, or browser code. To promote the initial administrator manually, run `python scripts/promote_admin.py --email etiennetuyihamye@gmail.com` from `apps/api` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set in the process environment. The script requires the account to exist and have confirmed its email, preserves unrelated app metadata, and does not set a password.
+
+For local administrator API testing, add `SUPABASE_SERVICE_ROLE_KEY` from the Supabase project's server-side secret/API-key settings to the ignored `apps/api/.env.local`. The local admin endpoints intentionally return a configuration error without this key. Never copy it into `apps/web/.env.local`, a `NEXT_PUBLIC_*` variable, or source control.
 
 ### Render deployment
 

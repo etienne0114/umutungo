@@ -4,6 +4,10 @@ from collections.abc import Generator
 from sqlalchemy import Engine, create_engine, inspect, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
+from govasset_api.config import load_local_environment
+
+load_local_environment()
+
 
 class Base(DeclarativeBase):
     pass

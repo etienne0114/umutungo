@@ -8,6 +8,10 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 from jwt.exceptions import PyJWKClientConnectionError, PyJWTError
 
+from govasset_api.config import load_local_environment
+
+load_local_environment()
+
 bearer_scheme = HTTPBearer(auto_error=False)
 
 

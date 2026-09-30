@@ -309,6 +309,16 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             metadata = dict(metadata) if isinstance(metadata, dict) else {}
             metadata["govasset_access"] = "approved" if payload.approved else "pending"
             updated_user = update_supabase_user_app_metadata(user_id_str, metadata)
+            updated_metadata = updated_user.get("app_metadata")
+            if (
+                updated_user.get("id") != user_id_str
+                or not isinstance(updated_metadata, dict)
+                or updated_metadata.get("govasset_access")
+                != ("approved" if payload.approved else "pending")
+            ):
+                raise SupabaseAdminError(
+                    "Supabase did not confirm the requested account access change."
+                )
         except SupabaseAdminError as exc:
             detail = str(exc)
             code = (
@@ -318,8 +328,6 @@ def create_app(engine: Engine | None = None) -> FastAPI:
             )
             raise HTTPException(status_code=code, detail=detail) from exc
 
-        updated_metadata = updated_user.get("app_metadata")
-        updated_metadata = updated_metadata if isinstance(updated_metadata, dict) else {}
         user_metadata = updated_user.get("user_metadata")
         user_metadata = user_metadata if isinstance(user_metadata, dict) else {}
         return AdminUserRead(

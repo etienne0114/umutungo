@@ -1,4 +1,5 @@
 from datetime import date
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -37,6 +38,40 @@ def test_create_asset_and_reject_duplicate_code(client):
     assert first.status_code == 201
     assert first.json()["asset_code"] == "FLEET-001"
     assert create_asset(client).status_code == 409
+
+
+def test_local_environment_file_loads_for_uvicorn_without_overriding_shell_values(
+    monkeypatch, tmp_path
+):
+    from govasset_api.config import load_local_environment
+
+    env_file = tmp_path / ".env.local"
+    env_file.write_text(
+        "SUPABASE_URL=https://local-project.supabase.co\n"
+        "SUPABASE_SERVICE_ROLE_KEY=local-test-secret\n"
+    )
+    monkeypatch.delenv("RENDER_SERVICE_ID", raising=False)
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "shell-secret")
+
+    load_local_environment(env_file)
+
+    assert os.environ["SUPABASE_URL"] == "https://local-project.supabase.co"
+    assert os.environ["SUPABASE_SERVICE_ROLE_KEY"] == "shell-secret"
+
+
+def test_local_environment_file_is_not_loaded_on_render(monkeypatch, tmp_path):
+    from govasset_api.config import load_local_environment
+
+    env_file = tmp_path / ".env.local"
+    env_file.write_text("SUPABASE_URL=https://local-project.supabase.co\n")
+    monkeypatch.setenv("RENDER_SERVICE_ID", "srv-production")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+
+    load_local_environment(env_file)
+
+    assert "SUPABASE_URL" not in os.environ
 
 
 def test_operations_report_exposes_data_gaps_and_operational_totals(client):
@@ -662,6 +697,50 @@ def test_admin_can_list_users_and_approve_confirmed_accounts(client, monkeypatch
     assert "user_metadata" not in listed.json()[0]
     assert updated.status_code == 200
     assert updated.json()["access"] == "approved"
+
+
+def test_admin_access_endpoint_fails_if_supabase_does_not_apply_change(
+    client, monkeypatch
+):
+    from govasset_api import auth
+
+    client.app.dependency_overrides[auth.require_authenticated_user] = lambda: {
+        "sub": "admin-123",
+        "app_metadata": {
+            "govasset_access": "approved",
+            "govasset_role": "admin",
+        },
+    }
+    monkeypatch.setattr(
+        "govasset_api.main.get_supabase_user",
+        lambda user_id: {
+            "id": user_id,
+            "email": "staff@example.org",
+            "created_at": "2026-09-20T10:00:00Z",
+            "email_confirmed_at": "2026-09-20T10:02:00Z",
+            "app_metadata": {"govasset_access": "pending"},
+        },
+    )
+    monkeypatch.setattr(
+        "govasset_api.main.update_supabase_user_app_metadata",
+        lambda user_id, _metadata: {
+            "id": user_id,
+            "email": "staff@example.org",
+            "created_at": "2026-09-20T10:00:00Z",
+            "email_confirmed_at": "2026-09-20T10:02:00Z",
+            "app_metadata": {"govasset_access": "pending"},
+        },
+    )
+
+    response = client.put(
+        "/api/v1/admin/users/245f7915-1c43-43d9-a63e-e40131024452/access",
+        json={"approved": True},
+    )
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == (
+        "Supabase did not confirm the requested account access change."
+    )
 
 
 def test_admin_cannot_revoke_own_access(client):
