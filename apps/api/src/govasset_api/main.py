@@ -82,7 +82,10 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         ).split(",")
         if origin.strip()
     ]
-    cors_origin_regex = os.getenv("CORS_ORIGIN_REGEX", "").strip() or None
+    cors_origin_regex = os.getenv(
+        "CORS_ORIGIN_REGEX",
+        r"^https://umutungo-[a-z0-9-]+-etienne0114s-projects\.vercel\.app$",
+    ).strip() or None
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,

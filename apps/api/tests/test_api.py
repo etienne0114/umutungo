@@ -43,10 +43,7 @@ def test_cors_allows_project_preview_origins_but_not_other_vercel_projects(
     monkeypatch,
 ):
     monkeypatch.setenv("AUTH_REQUIRED", "false")
-    monkeypatch.setenv(
-        "CORS_ORIGIN_REGEX",
-        r"^https://umutungo-[a-z0-9-]+-etienne0114s-projects\.vercel\.app$",
-    )
+    monkeypatch.delenv("CORS_ORIGIN_REGEX", raising=False)
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
