@@ -6,6 +6,7 @@ import { getSupabaseBrowserClient, supabaseIsConfigured } from "@/lib/supabase/c
 
 type AuthStatus = "loading" | "signed_out" | "signed_in" | "misconfigured";
 type AuthMode = "sign_in" | "register" | "reset_password" | "update_password" | "check_email";
+const approvalRequired = process.env.NEXT_PUBLIC_AUTH_REQUIRED !== "false";
 
 export function AuthGate({
   children,
@@ -83,8 +84,14 @@ export function AuthGate({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "").trim();
+    const fullName = String(formData.get("full_name") ?? "").trim();
+    const organization = String(formData.get("organization") ?? "").trim();
     const password = String(formData.get("password") ?? "");
     const confirmPassword = String(formData.get("confirm_password") ?? "");
+    if (fullName.length < 2) {
+      setSignInError("Enter your name using at least 2 characters.");
+      return;
+    }
     if (password.length < 8) {
       setSignInError("Use a password with at least 8 characters.");
       return;
@@ -100,14 +107,20 @@ export function AuthGate({
       const { data, error } = await getSupabaseBrowserClient().auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: window.location.origin },
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            full_name: fullName,
+            organization: organization || null,
+          },
+        },
       });
       if (error) throw error;
       if (data.session) {
         setSession(data.session);
         setStatus("signed_in");
         setMode("sign_in");
-        setAuthMessage("Your account was created. API access is available after administrator approval.");
+        setAuthMessage("");
       } else {
         setMode("check_email");
         setAuthMessage(`Check ${email} for the confirmation link, then sign in. API access requires administrator approval.`);
@@ -249,6 +262,43 @@ export function AuthGate({
     );
   }
 
+  if (
+    approvalRequired &&
+    status === "signed_in" &&
+    session &&
+    session.user.app_metadata.govasset_access !== "approved"
+  ) {
+    return (
+      <main className="auth-screen">
+        <section className="auth-card">
+          <BrandMark />
+          <div className="eyebrow">ACCOUNT REVIEW</div>
+          <h1>Approval pending</h1>
+          <p>
+            Your account {session.user.email ? `(${session.user.email}) ` : ""}is signed in,
+            but an administrator must approve workspace access before you can use Umutungo.
+          </p>
+          <p className="auth-footnote">
+            Registration and sign-in succeeded. Contact your project administrator if you need
+            access.
+          </p>
+          <button
+            className="button button-primary auth-submit"
+            onClick={() => void signOut().catch((error: unknown) => {
+              setSignInError(
+                error instanceof Error ? error.message : "Could not sign out. Please try again.",
+              );
+            })}
+            type="button"
+          >
+            Sign out
+          </button>
+          {signInError && <p className="auth-error" role="alert">{signInError}</p>}
+        </section>
+      </main>
+    );
+  }
+
   if (status === "signed_out" || !session) {
     if (mode === "reset_password") {
       return (
@@ -296,6 +346,18 @@ export function AuthGate({
               <span>Email address</span>
               <input autoComplete="email" name="email" required type="email" />
             </label>
+            {mode === "register" && (
+              <>
+                <label className="field">
+                  <span>Full name</span>
+                  <input autoComplete="name" maxLength={120} minLength={2} name="full_name" required type="text" />
+                </label>
+                <label className="field">
+                  <span>Organization <small>(optional)</small></span>
+                  <input autoComplete="organization" maxLength={160} name="organization" type="text" />
+                </label>
+              </>
+            )}
             <label className="field">
               <span>Password</span>
               <input
