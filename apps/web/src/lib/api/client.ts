@@ -42,7 +42,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
   } catch {
     throw new Error(
-      `Could not reach the API at ${API_BASE_URL}. Start the API and confirm the configured address.`,
+      `Could not complete the API request at ${API_BASE_URL}. Check the API address, network connection, and that this frontend origin is allowed by the API's CORS_ORIGINS.`,
     );
   }
 

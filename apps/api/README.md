@@ -79,7 +79,7 @@ The repository-root `render.yaml` defines a Python web service at `https://umutu
 | `AUTH_REQUIRED` | `true` |
 | `CORS_ORIGINS` | Exact production frontend origin: `https://umutungo7.vercel.app` |
 
-`DATABASE_URL` and `SUPABASE_URL` use `sync: false` so Render requests those values in its setup flow instead of storing them in this repository. Use the Supabase session-pooler connection URL for `DATABASE_URL`; the direct database hostname is IPv6-only and is unreachable from Render's current service network. `SUPABASE_URL` must be the Supabase project HTTPS URL. The container applies the Alembic migration on startup, creating application tables in the isolated `govasset` schema. Set production secrets directly in Render; never commit them or send them in chat.
+`DATABASE_URL` and `SUPABASE_URL` use `sync: false` so Render requests those values in its setup flow instead of storing them in this repository. Use the Supabase session-pooler connection URL for `DATABASE_URL`; the direct database hostname is IPv6-only and is unreachable from Render's current service network. `SUPABASE_URL` must be the Supabase project HTTPS URL. `CORS_ORIGINS` must contain each Vercel hostname users may visit, including the stable `umutungo7.vercel.app` and the active project aliases. A CORS rejection in a browser looks like a network failure even when the API is healthy. The container applies the Alembic migration on startup, creating application tables in the isolated `govasset` schema. Set production secrets directly in Render; never commit them or send them in chat.
 
 ## Safety and maturity boundary
 

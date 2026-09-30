@@ -76,7 +76,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_authenticated_user)])
