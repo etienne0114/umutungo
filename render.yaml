@@ -16,6 +16,8 @@ services:
         value: "true"
       - key: CORS_ORIGINS
         value: https://umutungo7.vercel.app,https://umutungo-five.vercel.app,https://umutungo-etienne0114s-projects.vercel.app
+      - key: CORS_ORIGIN_REGEX
+        value: '^https://umutungo-[a-z0-9-]+-etienne0114s-projects\.vercel\.app$'
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL

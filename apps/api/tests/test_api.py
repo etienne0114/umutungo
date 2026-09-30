@@ -39,6 +39,48 @@ def test_create_asset_and_reject_duplicate_code(client):
     assert create_asset(client).status_code == 409
 
 
+def test_cors_allows_project_preview_origins_but_not_other_vercel_projects(
+    monkeypatch,
+):
+    monkeypatch.setenv("AUTH_REQUIRED", "false")
+    monkeypatch.setenv(
+        "CORS_ORIGIN_REGEX",
+        r"^https://umutungo-[a-z0-9-]+-etienne0114s-projects\.vercel\.app$",
+    )
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    try:
+        with TestClient(create_app(engine)) as test_client:
+            allowed = test_client.options(
+                "/api/v1/assets",
+                headers={
+                    "Origin": "https://umutungo-preview-123-etienne0114s-projects.vercel.app",
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Headers": "authorization",
+                },
+            )
+            rejected = test_client.options(
+                "/api/v1/assets",
+                headers={
+                    "Origin": "https://other-project-etienne0114s-projects.vercel.app",
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Headers": "authorization",
+                },
+            )
+    finally:
+        engine.dispose()
+
+    assert allowed.status_code == 200
+    assert (
+        allowed.headers["access-control-allow-origin"]
+        == "https://umutungo-preview-123-etienne0114s-projects.vercel.app"
+    )
+    assert "access-control-allow-origin" not in rejected.headers
+
+
 def test_asset_dates_must_be_ordered(client):
     response = create_asset(
         client,

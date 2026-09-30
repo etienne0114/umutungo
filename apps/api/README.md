@@ -86,9 +86,10 @@ The repository-root `render.yaml` defines a Python web service at `https://umutu
 | `DATABASE_URL` | Supabase PostgreSQL connection URL |
 | `SUPABASE_URL` | Supabase project HTTPS URL (the same project as the browser Auth settings) |
 | `AUTH_REQUIRED` | `true` |
-| `CORS_ORIGINS` | Exact production frontend origin: `https://umutungo7.vercel.app` |
+| `CORS_ORIGINS` | Comma-separated stable frontend origins, including `https://umutungo7.vercel.app`, `https://umutungo-five.vercel.app`, and `https://umutungo-etienne0114s-projects.vercel.app` |
+| `CORS_ORIGIN_REGEX` | Optional, narrowly scoped regex for this Vercel project's generated deployment URLs; do not use a wildcard that accepts arbitrary origins |
 
-`DATABASE_URL` and `SUPABASE_URL` use `sync: false` so Render requests those values in its setup flow instead of storing them in this repository. Use the Supabase session-pooler connection URL for `DATABASE_URL`; the direct database hostname is IPv6-only and is unreachable from Render's current service network. `SUPABASE_URL` must be the Supabase project HTTPS URL. `CORS_ORIGINS` must contain each Vercel hostname users may visit, including the stable `umutungo7.vercel.app` and the active project aliases. A CORS rejection in a browser looks like a network failure even when the API is healthy. The container applies the Alembic migration on startup, creating application tables in the isolated `govasset` schema. Set production secrets directly in Render; never commit them or send them in chat.
+`DATABASE_URL` and `SUPABASE_URL` use `sync: false` so Render requests those values in its setup flow instead of storing them in this repository. Use the Supabase session-pooler connection URL for `DATABASE_URL`; the direct database hostname is IPv6-only and is unreachable from Render's current service network. `SUPABASE_URL` must be the Supabase project HTTPS URL. `CORS_ORIGINS` must contain each stable Vercel hostname users may visit; the narrowly scoped `CORS_ORIGIN_REGEX` covers generated deployment URLs for this Vercel project. Do not use `*` for origins. A CORS rejection in a browser looks like a network failure even when the API is healthy. The container applies the Alembic migration on startup, creating application tables in the isolated `govasset` schema. Set production secrets directly in Render; never commit them or send them in chat.
 
 ## Safety and maturity boundary
 
