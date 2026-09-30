@@ -12,7 +12,7 @@ services:
       - key: AUTH_REQUIRED
         value: "true"
       - key: CORS_ORIGINS
-        value: https://umutungo-five.vercel.app
+        value: https://umutungo7.vercel.app
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL

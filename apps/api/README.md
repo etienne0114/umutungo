@@ -75,7 +75,7 @@ The repository-root `render.yaml` defines the API as a Docker web service in Fra
 | `DATABASE_URL` | Supabase PostgreSQL connection URL |
 | `SUPABASE_URL` | Supabase project HTTPS URL (the same project as the browser Auth settings) |
 | `AUTH_REQUIRED` | `true` |
-| `CORS_ORIGINS` | Exact production frontend origin: `https://umutungo-five.vercel.app` |
+| `CORS_ORIGINS` | Exact production frontend origin: `https://umutungo7.vercel.app` |
 
 `DATABASE_URL` and `SUPABASE_URL` use `sync: false` so Render requests those values in its setup flow instead of storing them in this repository. Use the Supabase session-pooler connection URL for `DATABASE_URL`; the direct database hostname is IPv6-only and is unreachable from Render's current service network. `SUPABASE_URL` must be the Supabase project HTTPS URL. The container applies the Alembic migration on startup, creating application tables in the isolated `govasset` schema. Set production secrets directly in Render; never commit them or send them in chat.
 

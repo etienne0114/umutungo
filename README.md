@@ -23,7 +23,7 @@ The platform must complement—not replace or duplicate—official asset, fleet,
 
 ## Current maturity
 
-This repository contains the project definition, a local API prototype, and a Next.js dashboard. The frontend is deployed to Vercel at `https://umutungo-five.vercel.app` and supports invitation-only Supabase sign-in; hosted API requests verify Supabase access tokens and require an administrator-approved account. PostgreSQL migrations and a Render Docker-service Blueprint are in place, but the Render API is not currently healthy because its database endpoint is IPv6-only from the Render service. The product does not run AI models and is not approved for operational data or network deployment.
+This repository contains the project definition, a local API prototype, and a Next.js dashboard. The frontend is deployed to Vercel at `https://umutungo7.vercel.app` and supports invitation-only Supabase sign-in; hosted API requests verify Supabase access tokens and require an administrator-approved account. PostgreSQL migrations and a Render Docker-service Blueprint are in place, but the Render API is not currently healthy because its database endpoint is IPv6-only from the Render service. The product does not run AI models and is not approved for operational data or network deployment.
 
 ## Source-of-truth policy
 
