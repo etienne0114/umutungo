@@ -57,7 +57,7 @@ The API supports Supabase Auth bearer-token verification and PostgreSQL for host
 
 The API accepts only authenticated Supabase users whose trusted `app_metadata.govasset_access` is `approved`. Disable public signups and provision/approve pilot accounts through a trusted administrator process. The API does not currently implement institution-level or role-level authorization; do not grant access to users from multiple institutions until that boundary is implemented.
 
-The API stores its tables in the isolated PostgreSQL `govasset` schema. Apply versioned schema changes with Alembic; the container starts by running `alembic upgrade head` before Uvicorn. For local database migration work, run commands from this directory:
+The API stores its tables in the isolated PostgreSQL `govasset` schema. Apply versioned schema changes with Alembic. The Render start command runs `alembic upgrade head` before starting Uvicorn. For local database migration work, run commands from this directory:
 
 ```bash
 alembic upgrade head
@@ -68,7 +68,7 @@ The Alembic default is local SQLite. Use `DATABASE_URL` to override it. Never ru
 
 ### Render deployment
 
-The repository-root `render.yaml` defines the API as a Docker web service in Frankfurt and configures `/health` as its health check. Connect this repository to Render as a Blueprint and select the `main` branch. During initial Blueprint setup, enter the following values directly in the Render Dashboard:
+The repository-root `render.yaml` defines a Python web service at `https://umutungo.onrender.com`, rooted at `apps/api`, and configures `/health` as its health check. The service installs `apps/api/requirements.txt`, which delegates dependency definitions to `pyproject.toml`. Connect this repository to Render as a Blueprint and select the `main` branch. During initial Blueprint setup, enter the following values directly in the Render Dashboard:
 
 | Render environment variable | Source |
 |---|---|

@@ -1,11 +1,12 @@
 services:
   - type: web
-    name: umutungo-api
-    runtime: docker
-    region: frankfurt
+    name: umutungo
+    runtime: python
+    region: oregon
     plan: free
-    dockerfilePath: ./apps/api/Dockerfile
-    dockerContext: ./apps/api
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && uvicorn govasset_api.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:

@@ -20,7 +20,7 @@ Create the Vercel project with the repository root directory set to `apps/web`. 
 
 | Variable | Value |
 |---|---|
-| `NEXT_PUBLIC_API_BASE_URL` | `https://umutungo-api-mas1.onrender.com` |
+| `NEXT_PUBLIC_API_BASE_URL` | `https://umutungo.onrender.com` |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key (safe for browser use) |
 
