@@ -384,6 +384,27 @@ def test_authentication_fails_closed_without_project_url(client, monkeypatch):
     assert response.status_code == 503
 
 
+def test_authenticated_but_unapproved_user_is_forbidden(client, monkeypatch):
+    from govasset_api import auth
+
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+
+    def reject_unapproved_user(_token, _url):
+        raise auth.UserAccessNotApproved
+
+    monkeypatch.setattr(
+        auth,
+        "verify_supabase_token",
+        reject_unapproved_user,
+    )
+
+    response = client.get("/api/v1/assets", headers={"Authorization": "Bearer test-token"})
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Your account is awaiting administrator approval."
+
+
 def test_supabase_token_validation_checks_signature_issuer_and_audience(monkeypatch):
     from datetime import datetime, timedelta, timezone
     from types import SimpleNamespace
@@ -425,3 +446,36 @@ def test_supabase_token_validation_checks_signature_issuer_and_audience(monkeypa
     )
     with pytest.raises(jwt.InvalidAudienceError):
         auth.verify_supabase_token(bad_audience_token, project_url)
+
+
+def test_valid_supabase_token_requires_admin_approval(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    from types import SimpleNamespace
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from govasset_api import auth
+
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    project_url = "https://example.supabase.co"
+    now = datetime.now(timezone.utc)
+    claims = {
+        "sub": "user-123",
+        "role": "authenticated",
+        "aud": "authenticated",
+        "iss": f"{project_url}/auth/v1",
+        "iat": now,
+        "exp": now + timedelta(minutes=5),
+        "app_metadata": {},
+    }
+    token = jwt.encode(claims, private_key, algorithm="RS256", headers={"kid": "test-key"})
+
+    class TestJwksClient:
+        def get_signing_key_from_jwt(self, _token):
+            return SimpleNamespace(key=private_key.public_key())
+
+    monkeypatch.setattr(auth, "_jwks_client", lambda _url: TestJwksClient())
+
+    with pytest.raises(auth.UserAccessNotApproved):
+        auth.verify_supabase_token(token, project_url)

@@ -11,6 +11,10 @@ from jwt.exceptions import PyJWKClientConnectionError, PyJWTError
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
+class UserAccessNotApproved(Exception):
+    pass
+
+
 def authentication_required() -> bool:
     return os.getenv("AUTH_REQUIRED", "true").strip().lower() in {"1", "true", "yes"}
 
@@ -41,13 +45,10 @@ def verify_supabase_token(token: str, project_url: str) -> dict[str, Any]:
         options={"require": ["exp", "iat", "iss", "sub", "aud"]},
     )
     app_metadata = claims.get("app_metadata")
-    if (
-        not isinstance(claims.get("sub"), str)
-        or claims.get("role") != "authenticated"
-        or not isinstance(app_metadata, dict)
-        or app_metadata.get("govasset_access") != "approved"
-    ):
+    if not isinstance(claims.get("sub"), str) or claims.get("role") != "authenticated":
         raise jwt.InvalidTokenError("The token is not an authenticated user token.")
+    if not isinstance(app_metadata, dict) or app_metadata.get("govasset_access") != "approved":
+        raise UserAccessNotApproved
     return claims
 
 
@@ -72,6 +73,11 @@ def require_authenticated_user(
 
     try:
         return verify_supabase_token(credentials.credentials, project_url)
+    except UserAccessNotApproved as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your account is awaiting administrator approval.",
+        ) from exc
     except PyJWKClientConnectionError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

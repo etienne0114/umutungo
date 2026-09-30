@@ -1210,6 +1210,37 @@ h3 {
   line-height: 1.5;
 }
 
+.auth-success {
+  margin: 12px 0 0 !important;
+  border: 1px solid #cfe8df;
+  border-radius: 6px;
+  background: #f1faf6;
+  color: #286b55 !important;
+  padding: 9px 10px;
+  font-size: 10px !important;
+  line-height: 1.5;
+}
+
+.auth-link {
+  border: 0;
+  background: transparent;
+  color: #287c6d;
+  cursor: pointer;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 8px 0 0;
+}
+
+.auth-link:hover {
+  color: #165e52;
+  text-decoration: underline;
+}
+
+.auth-link.inline {
+  padding: 0;
+}
+
 .auth-footnote {
   margin: 18px 0 0 !important;
   color: #8b98a1 !important;

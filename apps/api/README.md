@@ -55,7 +55,7 @@ The API supports Supabase Auth bearer-token verification and PostgreSQL for host
 | `DATABASE_URL` | Persistent PostgreSQL connection URL; `postgresql://` URLs use psycopg |
 | `CORS_ORIGINS` | Comma-separated exact frontend origins, with no wildcard |
 
-The API accepts only authenticated Supabase users whose trusted `app_metadata.govasset_access` is `approved`. Disable public signups and provision/approve pilot accounts through a trusted administrator process. The API does not currently implement institution-level or role-level authorization; do not grant access to users from multiple institutions until that boundary is implemented.
+The web app supports Supabase email/password registration, email confirmation, sign-in, and password recovery. Supabase Auth must allow email registration and have the production/preview redirect URLs configured. New accounts do not receive application access automatically: only an administrator may set trusted `app_metadata.govasset_access=approved`. Until then, API requests return `403` with an approval-pending message. The API does not currently implement institution-level or role-level authorization; do not grant access to users from multiple institutions until that boundary is implemented.
 
 The API stores its tables in the isolated PostgreSQL `govasset` schema. Apply versioned schema changes with Alembic. The Render start command runs `alembic upgrade head` before starting Uvicorn. For local database migration work, run commands from this directory:
 

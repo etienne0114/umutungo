@@ -24,6 +24,6 @@ Create the Vercel project with the repository root directory set to `apps/web`. 
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase publishable key (safe for browser use) |
 
-Configure the API's `CORS_ORIGINS` with the exact production and required preview origins. Configure Supabase Auth's allowed redirect URLs for the selected Vercel domains. Public self-registration should remain disabled; accounts are provisioned by an administrator and must have trusted `app_metadata.govasset_access=approved` to use the API.
+Configure the API's `CORS_ORIGINS` with the exact production and required preview origins. In Supabase Auth, enable email sign-up and configure the site's URL plus allowed redirect URLs for the selected Vercel domains. Users can register and confirm their email, but an administrator must set trusted `app_metadata.govasset_access=approved` before API access is granted. Configure the same allowed redirect URLs for password recovery.
 
 The frontend is currently available at `https://umutungo7.vercel.app`. The shorter `https://umutungo.vercel.app` alias is already in use by another Vercel deployment. Never paste access tokens into chat or commit them to this repository.

@@ -916,7 +916,8 @@ function AssetDrawer({
   const [tab, setTab] = useState<"overview" | "inspections" | "maintenance">("overview");
   const [inspections, setInspections] = useState<InspectionRecord[]>([]);
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>([]);
-  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [loadedHistoryForAsset, setLoadedHistoryForAsset] = useState<Asset["id"] | null>(null);
+  const loadingHistory = loadedHistoryForAsset !== asset.id;
   const [busy, setBusy] = useState(false);
   const [showInspectionForm, setShowInspectionForm] = useState(false);
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
@@ -934,7 +935,7 @@ function AssetDrawer({
         if (!cancelled) onError(getErrorMessage(error));
       })
       .finally(() => {
-        if (!cancelled) setLoadingHistory(false);
+        if (!cancelled) setLoadedHistoryForAsset(asset.id);
       });
     return () => {
       cancelled = true;
