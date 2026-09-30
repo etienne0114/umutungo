@@ -202,6 +202,45 @@ export function AuthGate({
     }
   }
 
+  async function resendConfirmation() {
+    if (!registrationEmail) {
+      setSignInError("Return to registration and enter the email address you used.");
+      return;
+    }
+    setBusy(true);
+    setSignInError("");
+    setAuthMessage("");
+    try {
+      const { error } = await getSupabaseBrowserClient().auth.resend({
+        type: "signup",
+        email: registrationEmail,
+        options: {
+          emailRedirectTo: new URL("/auth/callback", window.location.origin).toString(),
+        },
+      });
+      if (error) throw error;
+      setMode("check_email");
+      setAuthMessage(
+        `If ${registrationEmail} has a pending registration, a confirmation link has been sent.`,
+      );
+    } catch (error) {
+      const rateLimit = getSignupRateLimit(error);
+      if (rateLimit === "email") {
+        setMode("email_rate_limited");
+        setSignInError("");
+      } else {
+        setMode("email_delivery_failed");
+        setSignInError(
+          isSignupEmailDeliveryError(error)
+            ? ""
+            : "We couldn't request another confirmation link. Please try again after the email service is fixed.",
+        );
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function requestPasswordReset(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const email = String(new FormData(event.currentTarget).get("email") ?? "").trim();
@@ -345,12 +384,21 @@ export function AuthGate({
             have created a pending account, but the confirmation email was not delivered.
           </p>
           <p className="auth-footnote">
-            Please don&apos;t repeatedly submit the form. Wait up to an hour, then try signing in
-            with the same email address. Reliable registration requires the project
-            administrator to configure a production email provider in Supabase.
+            Please don&apos;t repeatedly submit requests. Wait for the current rate-limit window
+            to pass before retrying. If the limit persists, the project administrator should
+            review Supabase Auth email limits and SMTP delivery.
           </p>
+          {signInError && <p className="auth-error" role="alert">{signInError}</p>}
           <button
             className="button button-primary auth-submit"
+            disabled={busy || !registrationEmail}
+            onClick={() => void resendConfirmation()}
+            type="button"
+          >
+            {busy ? "Requesting…" : "Resend confirmation email"}
+          </button>
+          <button
+            className="auth-link"
             onClick={() => {
               setMode("sign_in");
               setSignInError("");
@@ -380,10 +428,20 @@ export function AuthGate({
           <p className="auth-footnote">
             The project administrator should verify the Supabase SMTP host, credentials, and
             sender address against the verified Resend domain. Once corrected, return here and
-            submit registration again.
+            request a new confirmation link below. If this email does not have a pending
+            registration, return to the registration form.
           </p>
+          {signInError && <p className="auth-error" role="alert">{signInError}</p>}
           <button
             className="button button-primary auth-submit"
+            disabled={busy || !registrationEmail}
+            onClick={() => void resendConfirmation()}
+            type="button"
+          >
+            {busy ? "Requesting…" : "Resend confirmation email"}
+          </button>
+          <button
+            className="auth-link"
             onClick={() => {
               setMode("register");
               setSignInError("");
@@ -494,6 +552,7 @@ export function AuthGate({
               <input
                 autoComplete="email"
                 defaultValue={mode === "register" ? registrationEmail : ""}
+                key={mode}
                 name="email"
                 required
                 type="email"
