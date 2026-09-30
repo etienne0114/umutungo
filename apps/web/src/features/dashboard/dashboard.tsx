@@ -10,7 +10,9 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
 import { Icon, IconName } from "@/components/icons";
+import { ProfilePanel, avatarInitials } from "@/features/profile/profile-panel";
 import { api } from "@/lib/api/client";
 import type {
   Asset,
@@ -56,10 +58,10 @@ function getErrorMessage(error: unknown) {
 }
 
 export function Dashboard({
-  email,
+  user,
   onSignOut,
 }: {
-  email: string;
+  user: User;
   onSignOut: () => Promise<void>;
 }) {
   const [view, setView] = useState<View>("overview");
@@ -78,9 +80,16 @@ export function Dashboard({
   const [selectedRecommendation, setSelectedRecommendation] = useState<Recommendation | null>(
     null,
   );
+  const [showProfile, setShowProfile] = useState(false);
   const [showAssetForm, setShowAssetForm] = useState(false);
   const [busy, setBusy] = useState(false);
   const reportError = useCallback((message: string) => setError(message), []);
+  const email = user.email ?? "Signed-in user";
+  const displayName =
+    typeof user.user_metadata.full_name === "string" && user.user_metadata.full_name.trim()
+      ? user.user_metadata.full_name.trim()
+      : email;
+  const isApproved = user.app_metadata.govasset_access === "approved";
 
   const fetchDashboardData = useCallback(
     () => Promise.all([api.listAssets(), api.listTriage()]),
@@ -294,14 +303,22 @@ export function Dashboard({
             <strong>Decision support only</strong>
             <p>Recommendations are rule-based and require staff review.</p>
           </div>
-          <div className="profile">
-            <div className="avatar">TT</div>
+          <button
+            aria-label="Open user profile"
+            className="profile profile-button"
+            onClick={() => setShowProfile(true)}
+            type="button"
+          >
+            <div className="avatar">{avatarInitials(displayName)}</div>
             <div className="profile-copy">
-              <strong>{email}</strong>
-              <span>Authenticated workspace</span>
+              <strong>{displayName}</strong>
+              <span>{isApproved ? "Approved account" : "Pending approval"}</span>
             </div>
-            <span className="online-dot" title="Local prototype" />
-          </div>
+            <span
+              className={`online-dot ${isApproved ? "" : "pending"}`}
+              title={isApproved ? "Account approved" : "Awaiting administrator approval"}
+            />
+          </button>
         </div>
       </aside>
 
@@ -338,7 +355,14 @@ export function Dashboard({
             >
               Sign out
             </button>
-            <div className="avatar avatar-small">TT</div>
+            <button
+              aria-label="Open user profile"
+              className="avatar avatar-small avatar-button"
+              onClick={() => setShowProfile(true)}
+              type="button"
+            >
+              {avatarInitials(displayName)}
+            </button>
           </div>
         </header>
 
@@ -428,6 +452,7 @@ export function Dashboard({
           onSaved={(message) => setNotice(message)}
         />
       )}
+      {showProfile && <ProfilePanel user={user} onClose={() => setShowProfile(false)} />}
       {showAssetForm && (
         <Modal title="Add an asset" onClose={() => setShowAssetForm(false)}>
           <form className="form-stack" onSubmit={(event) => void createAsset(event)}>

@@ -238,6 +238,22 @@ svg {
   padding: 15px 4px 1px;
 }
 
+.profile-button {
+  width: 100%;
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.profile-button:hover .profile-copy strong {
+  color: #187666;
+}
+
 .avatar {
   display: grid;
   width: 35px;
@@ -257,18 +273,34 @@ svg {
   font-size: 10px;
 }
 
+.avatar-button {
+  border: 0;
+  cursor: pointer;
+}
+
+.avatar-button:hover {
+  background: #d9e9e4;
+}
+
 .profile-copy {
   display: grid;
+  min-width: 0;
   gap: 3px;
 }
 
 .profile-copy strong {
+  overflow: hidden;
   font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .profile-copy span {
+  overflow: hidden;
   color: var(--muted);
   font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .online-dot,
@@ -281,6 +313,10 @@ svg {
 
 .online-dot {
   margin-left: auto;
+}
+
+.online-dot.pending {
+  background: #d59c45;
 }
 
 .main-area {
@@ -1530,6 +1566,111 @@ h3 {
   font-size: 17px;
 }
 
+.profile-modal {
+  width: min(100%, 560px);
+}
+
+.profile-modal-subtitle {
+  margin: 5px 0 0;
+  color: #83909a;
+  font-size: 10px;
+}
+
+.profile-account-summary {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 18px;
+  border: 1px solid #e9efed;
+  border-radius: 8px;
+  background: #f8fbfa;
+  padding: 11px;
+}
+
+.profile-account-copy {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.profile-account-copy strong,
+.profile-account-copy span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profile-account-copy strong {
+  color: #294555;
+  font-size: 11px;
+}
+
+.profile-account-copy span {
+  color: #82909a;
+  font-size: 10px;
+}
+
+.access-badge {
+  flex: 0 0 auto;
+  margin-left: auto;
+  border-radius: 20px;
+  padding: 5px 8px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.access-badge.approved {
+  background: #e7f5ee;
+  color: #287655;
+}
+
+.access-badge.pending {
+  background: #fbf1df;
+  color: #956719;
+}
+
+.profile-form {
+  gap: 12px;
+}
+
+.profile-form .field input:disabled {
+  background: #f5f7f8;
+  color: #7d8b95;
+  cursor: not-allowed;
+}
+
+.profile-form .field small {
+  color: #88949d;
+  font-size: 9px;
+}
+
+.profile-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-access-note,
+.profile-saved-message {
+  margin: 0;
+  border-radius: 6px;
+  padding: 9px 10px;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.profile-access-note {
+  border: 1px solid #efe4cc;
+  background: #fcf8ef;
+  color: #856628;
+}
+
+.profile-saved-message {
+  border: 1px solid #cfe8df;
+  background: #f1faf6;
+  color: #286b55;
+}
+
 .form-stack {
   display: grid;
   gap: 14px;
@@ -1775,6 +1916,10 @@ h3 {
 }
 
 @media (max-width: 430px) {
+  .profile-form-row {
+    grid-template-columns: 1fr;
+  }
+
   .local-badge {
     font-size: 0;
     padding: 7px;

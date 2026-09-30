@@ -10,10 +10,12 @@ From this directory:
 python -m venv .venv
 . .venv/bin/activate
 python -m pip install -e '.[dev]'
-uvicorn govasset_api.main:app --reload --host 127.0.0.1
+uvicorn govasset_api.main:app --reload --host 127.0.0.1 --port 8000 --env-file .env.local
 ```
 
-The default database is `./govasset.db` (SQLite). Set `DATABASE_URL` to a SQLAlchemy-supported URL to use a different database. Browser requests from the two localhost Next.js origins are allowed by default; configure `CORS_ORIGINS` as a comma-separated exact-origin allowlist for other local frontend origins. Never put production data in this local prototype.
+The API explicitly loads `apps/api/.env.local` for local development. This local-only config uses SQLite and sets `AUTH_REQUIRED=false`; it avoids writing test records to the hosted Supabase database. The web frontend still signs in through Supabase, but the local API skips bearer-token enforcement. Never use this configuration for a deployed service or put production data in this local prototype. The separate `apps/api/.env` file is not loaded by this command.
+
+To use a different local database, change `DATABASE_URL` in `.env.local`. Browser requests from the two localhost Next.js origins are allowed by default; configure `CORS_ORIGINS` as a comma-separated exact-origin allowlist for other local frontend origins.
 
 Open `http://127.0.0.1:8000/docs` for interactive API documentation.
 

@@ -1,7 +1,7 @@
 "use client";
 
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
-import type { AuthChangeEvent, AuthError, Session } from "@supabase/supabase-js";
+import type { AuthChangeEvent, AuthError, Session, User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient, supabaseIsConfigured } from "@/lib/supabase/client";
 
 type AuthStatus = "loading" | "signed_out" | "signed_in" | "misconfigured";
@@ -10,7 +10,7 @@ type AuthMode = "sign_in" | "register" | "reset_password" | "update_password" | 
 export function AuthGate({
   children,
 }: {
-  children: (email: string, signOut: () => Promise<void>) => ReactNode;
+  children: (user: User, signOut: () => Promise<void>) => ReactNode;
 }) {
   const [status, setStatus] = useState<AuthStatus>(() =>
     supabaseIsConfigured() ? "loading" : "misconfigured",
@@ -342,7 +342,7 @@ export function AuthGate({
     );
   }
 
-  return children(session.user.email ?? "Signed-in user", signOut);
+  return children(session.user, signOut);
 }
 
 function PasswordFields() {
