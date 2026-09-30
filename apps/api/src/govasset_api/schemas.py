@@ -191,3 +191,19 @@ class RecommendationEventRead(BaseModel):
     occurred_on: date | None
     reason: str | None
     created_at: datetime
+
+
+class AdminUserRead(BaseModel):
+    id: str
+    email: str | None
+    created_at: datetime
+    email_confirmed_at: datetime | None
+    last_sign_in_at: datetime | None
+    access: str
+    role: str
+    full_name: str | None
+    organization: str | None
+
+
+class AdminAccessUpdate(BaseModel):
+    approved: bool

@@ -89,3 +89,15 @@ def require_authenticated_user(
             detail="The Supabase access token is invalid or expired.",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+
+
+def require_admin_user(
+    claims: dict[str, Any] | None = Depends(require_authenticated_user),
+) -> dict[str, Any]:
+    app_metadata = claims.get("app_metadata") if claims is not None else None
+    if not isinstance(app_metadata, dict) or app_metadata.get("govasset_role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator access is required.",
+        )
+    return claims

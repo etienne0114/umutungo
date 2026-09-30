@@ -29,4 +29,6 @@ Registration requires email confirmation in the current Supabase project. New an
 
 Signed-in users can edit their name, organization, department, and phone from the profile panel. These personal details are stored in the user's Supabase Auth `user_metadata`; only that user's own metadata can be changed from the browser. Access approval remains in trusted `app_metadata` and cannot be changed through the profile form.
 
+Users with the trusted `app_metadata.govasset_role=admin` claim see a **User access** view. New accounts remain pending until an administrator approves them after email confirmation. The Supabase service-role key is server-only and must never be added to this frontend or any `NEXT_PUBLIC_*` setting.
+
 The frontend is currently available at `https://umutungo7.vercel.app`. The shorter `https://umutungo.vercel.app` alias is already in use by another Vercel deployment. Never paste access tokens into chat or commit them to this repository.

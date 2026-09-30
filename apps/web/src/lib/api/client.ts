@@ -1,6 +1,7 @@
 import type {
   Asset,
   AssetCreate,
+  AdminUser,
   Disposition,
   InspectionCreate,
   InspectionRecord,
@@ -77,6 +78,12 @@ function queryString(values: Record<string, string | number | undefined>) {
 }
 
 export const api = {
+  listAdminUsers: () => request<AdminUser[]>("/api/v1/admin/users"),
+  setUserAccess: (userId: string, approved: boolean) =>
+    request<AdminUser>(`/api/v1/admin/users/${encodeURIComponent(userId)}/access`, {
+      method: "PUT",
+      body: JSON.stringify({ approved }),
+    }),
   listAssets: () => request<Asset[]>("/api/v1/assets?active=true"),
   createAsset: (payload: AssetCreate) =>
     request<Asset>("/api/v1/assets", { method: "POST", body: JSON.stringify(payload) }),

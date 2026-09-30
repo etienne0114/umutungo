@@ -83,6 +83,18 @@ export interface RecommendationEvent {
   created_at: string;
 }
 
+export interface AdminUser {
+  id: string;
+  email: string | null;
+  created_at: string;
+  email_confirmed_at: string | null;
+  last_sign_in_at: string | null;
+  access: "pending" | "approved";
+  role: "admin" | "user";
+  full_name: string | null;
+  organization: string | null;
+}
+
 export interface AssetCreate {
   asset_code: string;
   asset_type: string;

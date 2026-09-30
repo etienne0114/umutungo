@@ -479,3 +479,123 @@ def test_valid_supabase_token_requires_admin_approval(monkeypatch):
 
     with pytest.raises(auth.UserAccessNotApproved):
         auth.verify_supabase_token(token, project_url)
+
+
+def test_admin_user_listing_requires_admin_role(client, monkeypatch):
+    from govasset_api import auth
+
+    client.app.dependency_overrides[auth.require_authenticated_user] = lambda: {
+        "sub": "user-123",
+        "app_metadata": {"govasset_access": "approved"},
+    }
+    monkeypatch.setattr(
+        "govasset_api.main.list_supabase_users",
+        lambda: pytest.fail("Non-admin users must not reach the Supabase admin API."),
+    )
+
+    response = client.get("/api/v1/admin/users")
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Administrator access is required."
+
+
+def test_admin_can_list_users_and_approve_confirmed_accounts(client, monkeypatch):
+    from govasset_api import auth
+
+    client.app.dependency_overrides[auth.require_authenticated_user] = lambda: {
+        "sub": "admin-123",
+        "app_metadata": {
+            "govasset_access": "approved",
+            "govasset_role": "admin",
+        },
+    }
+    user = {
+        "id": "245f7915-1c43-43d9-a63e-e40131024452",
+        "email": "staff@example.org",
+        "created_at": "2026-09-20T10:00:00Z",
+        "email_confirmed_at": "2026-09-20T10:02:00Z",
+        "last_sign_in_at": None,
+        "app_metadata": {"provider": "email", "govasset_access": "pending"},
+        "user_metadata": {"full_name": "Staff Member", "organization": "Health"},
+    }
+    monkeypatch.setattr("govasset_api.main.list_supabase_users", lambda: [user])
+    monkeypatch.setattr("govasset_api.main.get_supabase_user", lambda _user_id: user)
+
+    def update_user_app_metadata(user_id, metadata):
+        assert user_id == "245f7915-1c43-43d9-a63e-e40131024452"
+        assert metadata == {
+            "provider": "email",
+            "govasset_access": "approved",
+        }
+        return {**user, "app_metadata": metadata}
+
+    monkeypatch.setattr(
+        "govasset_api.main.update_supabase_user_app_metadata",
+        update_user_app_metadata,
+    )
+
+    listed = client.get("/api/v1/admin/users")
+    updated = client.put(
+        "/api/v1/admin/users/245f7915-1c43-43d9-a63e-e40131024452/access",
+        json={"approved": True},
+    )
+
+    assert listed.status_code == 200
+    assert listed.json()[0]["access"] == "pending"
+    assert listed.json()[0]["role"] == "user"
+    assert listed.json()[0]["full_name"] == "Staff Member"
+    assert "user_metadata" not in listed.json()[0]
+    assert updated.status_code == 200
+    assert updated.json()["access"] == "approved"
+
+
+def test_admin_cannot_revoke_own_access(client):
+    from govasset_api import auth
+
+    client.app.dependency_overrides[auth.require_authenticated_user] = lambda: {
+        "sub": "4ccf50b3-128c-4703-b9ed-e349f7433c24",
+        "app_metadata": {
+            "govasset_access": "approved",
+            "govasset_role": "admin",
+        },
+    }
+
+    response = client.put(
+        "/api/v1/admin/users/4ccf50b3-128c-4703-b9ed-e349f7433c24/access",
+        json={"approved": False},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Administrators cannot revoke their own access."
+
+
+def test_admin_cannot_approve_unconfirmed_account(client, monkeypatch):
+    from govasset_api import auth
+
+    client.app.dependency_overrides[auth.require_authenticated_user] = lambda: {
+        "sub": "4ccf50b3-128c-4703-b9ed-e349f7433c24",
+        "app_metadata": {
+            "govasset_access": "approved",
+            "govasset_role": "admin",
+        },
+    }
+    monkeypatch.setattr(
+        "govasset_api.main.get_supabase_user",
+        lambda _user_id: {
+            "id": "245f7915-1c43-43d9-a63e-e40131024452",
+            "email": "unconfirmed@example.org",
+            "email_confirmed_at": None,
+        },
+    )
+    monkeypatch.setattr(
+        "govasset_api.main.update_supabase_user_app_metadata",
+        lambda *_args: pytest.fail("Unconfirmed users cannot be approved."),
+    )
+
+    response = client.put(
+        "/api/v1/admin/users/245f7915-1c43-43d9-a63e-e40131024452/access",
+        json={"approved": True},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Users must confirm their email before approval."

@@ -1,6 +1,7 @@
 import os
 from contextlib import asynccontextmanager
 from datetime import date
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,7 +9,7 @@ from sqlalchemy import Engine, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from govasset_api.auth import require_authenticated_user
+from govasset_api.auth import require_admin_user, require_authenticated_user
 from govasset_api.auth import authentication_required, supabase_url
 from govasset_api.database import (
     initialize_schema,
@@ -27,6 +28,8 @@ from govasset_api.models import (
 from govasset_api.schemas import (
     AssetCreate,
     AssetRead,
+    AdminAccessUpdate,
+    AdminUserRead,
     InspectionCreate,
     InspectionRead,
     MaintenanceCreate,
@@ -39,6 +42,12 @@ from govasset_api.schemas import (
     TriageRunRead,
 )
 from govasset_api.triage import RULE_VERSION, assess_asset
+from govasset_api.supabase_admin import (
+    SupabaseAdminError,
+    get_supabase_user,
+    list_supabase_users,
+    update_supabase_user_app_metadata,
+)
 
 
 def create_app(engine: Engine | None = None) -> FastAPI:
@@ -76,7 +85,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_origins,
-        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_methods=["GET", "POST", "PUT", "OPTIONS"],
         allow_headers=["Authorization", "Content-Type"],
     )
     api = APIRouter(prefix="/api/v1", dependencies=[Depends(require_authenticated_user)])
@@ -84,6 +93,128 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.get("/health", tags=["system"])
     def health():
         return {"status": "ok"}
+
+    @api.get(
+        "/admin/users",
+        response_model=list[AdminUserRead],
+        tags=["administration"],
+        dependencies=[Depends(require_admin_user)],
+    )
+    def list_users():
+        try:
+            users = list_supabase_users()
+        except SupabaseAdminError as exc:
+            detail = str(exc)
+            code = (
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if "not configured" in detail
+                else status.HTTP_502_BAD_GATEWAY
+            )
+            raise HTTPException(status_code=code, detail=detail) from exc
+
+        summaries = []
+        for user in users:
+            metadata = user.get("app_metadata")
+            metadata = metadata if isinstance(metadata, dict) else {}
+            user_metadata = user.get("user_metadata")
+            user_metadata = user_metadata if isinstance(user_metadata, dict) else {}
+            summaries.append(
+                AdminUserRead(
+                    id=str(user.get("id", "")),
+                    email=user.get("email"),
+                    created_at=user["created_at"],
+                    email_confirmed_at=user.get("email_confirmed_at"),
+                    last_sign_in_at=user.get("last_sign_in_at"),
+                    access=(
+                        "approved"
+                        if metadata.get("govasset_access") == "approved"
+                        else "pending"
+                    ),
+                    role=(
+                        "admin"
+                        if metadata.get("govasset_role") == "admin"
+                        else "user"
+                    ),
+                    full_name=(
+                        user_metadata.get("full_name")
+                        if isinstance(user_metadata.get("full_name"), str)
+                        else None
+                    ),
+                    organization=(
+                        user_metadata.get("organization")
+                        if isinstance(user_metadata.get("organization"), str)
+                        else None
+                    ),
+                )
+            )
+        return summaries
+
+    @api.put(
+        "/admin/users/{user_id}/access",
+        response_model=AdminUserRead,
+        tags=["administration"],
+        dependencies=[Depends(require_admin_user)],
+    )
+    def update_user_access(
+        user_id: UUID,
+        payload: AdminAccessUpdate,
+        admin_claims: dict = Depends(require_admin_user),
+    ):
+        user_id_str = str(user_id)
+        if user_id_str == admin_claims.get("sub") and not payload.approved:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Administrators cannot revoke their own access.",
+            )
+        try:
+            target_user = get_supabase_user(user_id_str)
+            if payload.approved and not target_user.get("email_confirmed_at"):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Users must confirm their email before approval.",
+                )
+            metadata = target_user.get("app_metadata")
+            metadata = dict(metadata) if isinstance(metadata, dict) else {}
+            metadata["govasset_access"] = "approved" if payload.approved else "pending"
+            updated_user = update_supabase_user_app_metadata(user_id_str, metadata)
+        except SupabaseAdminError as exc:
+            detail = str(exc)
+            code = (
+                status.HTTP_503_SERVICE_UNAVAILABLE
+                if "not configured" in detail
+                else status.HTTP_502_BAD_GATEWAY
+            )
+            raise HTTPException(status_code=code, detail=detail) from exc
+
+        updated_metadata = updated_user.get("app_metadata")
+        updated_metadata = updated_metadata if isinstance(updated_metadata, dict) else {}
+        user_metadata = updated_user.get("user_metadata")
+        user_metadata = user_metadata if isinstance(user_metadata, dict) else {}
+        return AdminUserRead(
+            id=str(updated_user.get("id", user_id_str)),
+            email=updated_user.get("email"),
+            created_at=updated_user["created_at"],
+            email_confirmed_at=updated_user.get("email_confirmed_at"),
+            last_sign_in_at=updated_user.get("last_sign_in_at"),
+            access=(
+                "approved"
+                if updated_metadata.get("govasset_access") == "approved"
+                else "pending"
+            ),
+            role=(
+                "admin" if updated_metadata.get("govasset_role") == "admin" else "user"
+            ),
+            full_name=(
+                user_metadata.get("full_name")
+                if isinstance(user_metadata.get("full_name"), str)
+                else None
+            ),
+            organization=(
+                user_metadata.get("organization")
+                if isinstance(user_metadata.get("organization"), str)
+                else None
+            ),
+        )
 
     @api.post(
         "/assets",

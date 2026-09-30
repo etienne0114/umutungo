@@ -1671,6 +1671,118 @@ h3 {
   color: #286b55;
 }
 
+.access-management {
+  display: grid;
+  gap: 20px;
+}
+
+.access-management > .page-heading {
+  margin-bottom: 0;
+}
+
+.access-management > .page-heading .button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.access-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.access-summary-card {
+  display: grid;
+  gap: 8px;
+  padding: 17px 19px;
+}
+
+.access-summary-card span {
+  color: #7b8a95;
+  font-size: 10px;
+}
+
+.access-summary-card strong {
+  color: #294555;
+  font-size: 24px;
+}
+
+.access-users-panel {
+  overflow: hidden;
+}
+
+.access-user-list {
+  display: grid;
+}
+
+.access-user-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid #edf0f2;
+  padding: 14px 18px;
+}
+
+.access-user-avatar {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+  background: #e7f0ed;
+  color: #397568;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.access-user-identity {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 4px;
+}
+
+.access-user-identity strong,
+.access-user-identity span,
+.access-user-identity small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-user-identity strong {
+  color: #334d5e;
+  font-size: 11px;
+}
+
+.access-user-identity span {
+  color: #6f818d;
+  font-size: 10px;
+}
+
+.access-user-identity small {
+  color: #91a0a9;
+  font-size: 9px;
+}
+
+.access-user-state {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.access-user-action {
+  flex: 0 0 auto;
+}
+
+.access-user-action .button {
+  min-width: 82px;
+  min-height: 32px;
+  padding: 0 10px;
+  font-size: 10px;
+}
+
 .form-stack {
   display: grid;
   gap: 14px;
@@ -1916,6 +2028,19 @@ h3 {
 }
 
 @media (max-width: 430px) {
+  .access-user-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .access-user-state {
+    margin-left: 48px;
+  }
+
+  .access-user-action {
+    margin-left: auto;
+  }
+
   .profile-form-row {
     grid-template-columns: 1fr;
   }

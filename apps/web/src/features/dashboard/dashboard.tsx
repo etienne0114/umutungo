@@ -12,6 +12,7 @@ import {
 import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { Icon, IconName } from "@/components/icons";
+import { AccessManagement } from "@/features/admin/access-management";
 import { ProfilePanel, avatarInitials } from "@/features/profile/profile-panel";
 import { api } from "@/lib/api/client";
 import type {
@@ -28,9 +29,9 @@ import type {
   TriageItem,
 } from "@/lib/api/types";
 
-type View = "overview" | "assets" | "recommendations";
+type View = "overview" | "assets" | "recommendations" | "users";
 
-const navigation: { id: View; label: string; icon: IconName }[] = [
+const navigation: { id: Exclude<View, "users">; label: string; icon: IconName }[] = [
   { id: "overview", label: "Overview", icon: "overview" },
   { id: "assets", label: "Asset register", icon: "assets" },
   { id: "recommendations", label: "Recommendations", icon: "recommendations" },
@@ -90,6 +91,7 @@ export function Dashboard({
       ? user.user_metadata.full_name.trim()
       : email;
   const isApproved = user.app_metadata.govasset_access === "approved";
+  const isAdmin = user.app_metadata.govasset_role === "admin";
 
   const fetchDashboardData = useCallback(
     () => Promise.all([api.listAssets(), api.listTriage()]),
@@ -278,7 +280,7 @@ export function Dashboard({
         </Link>
         <div className="workspace-label">WORKSPACE</div>
         <nav className="primary-nav" aria-label="Main navigation">
-          {navigation.map((item) => (
+          {[...navigation, ...(isAdmin ? [{ id: "users" as const, label: "User access", icon: "users" as const }] : [])].map((item) => (
             <button
               className={`nav-item ${view === item.id ? "active" : ""}`}
               key={item.id}
@@ -332,7 +334,9 @@ export function Dashboard({
                 ? "Overview"
                 : view === "assets"
                   ? "Asset register"
-                  : "Recommendations"}
+                  : view === "recommendations"
+                    ? "Recommendations"
+                    : "User access"}
             </strong>
           </div>
           <div className="topbar-actions">
@@ -429,6 +433,7 @@ export function Dashboard({
               runs={runs}
             />
           )}
+          {view === "users" && isAdmin && <AccessManagement currentUserId={user.id} />}
         </div>
       </main>
 

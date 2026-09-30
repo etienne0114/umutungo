@@ -28,6 +28,8 @@ The initial demonstration rules mark recorded `critical` condition as critical; 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | Process health |
+| `GET` | `/api/v1/admin/users` | Admin-only list of registered account summaries |
+| `PUT` | `/api/v1/admin/users/{user_id}/access` | Admin-only approve/revoke action for a confirmed account |
 | `POST` | `/api/v1/assets` | Register an asset |
 | `GET` | `/api/v1/assets` | List assets; optionally filter with `?active=true` |
 | `GET` | `/api/v1/assets/{asset_id}` | Get asset details |
@@ -56,6 +58,7 @@ The API supports Supabase Auth bearer-token verification and PostgreSQL for host
 | `SUPABASE_URL` | Supabase project URL used to validate token issuer and JWKS |
 | `DATABASE_URL` | Persistent PostgreSQL connection URL; `postgresql://` URLs use psycopg |
 | `CORS_ORIGINS` | Comma-separated exact frontend origins, with no wildcard |
+| `SUPABASE_SERVICE_ROLE_KEY` | Server-only key used by admin user-management endpoints; never expose it to the browser |
 
 The web app supports Supabase email/password registration, email confirmation, sign-in, and password recovery. Supabase Auth must allow email registration and have the production/preview redirect URLs configured. New accounts do not receive application access automatically: only an administrator may set trusted `app_metadata.govasset_access=approved`. Until then, API requests return `403` with an approval-pending message. The API does not currently implement institution-level or role-level authorization; do not grant access to users from multiple institutions until that boundary is implemented.
 
@@ -67,6 +70,12 @@ alembic downgrade -1
 ```
 
 The Alembic default is local SQLite. Use `DATABASE_URL` to override it. Never run downgrade or apply a migration against a real hosted database without confirming the target, backup, and migration plan.
+
+### Administrator access
+
+The requested initial administrator is `etiennetuyihamye@gmail.com`. Its trusted Supabase `app_metadata` contains `govasset_access=approved` and `govasset_role=admin`. After provisioning or changing trusted claims, the user must sign out and sign back in to receive a token with the new claims.
+
+Administrators can review email-confirmed accounts in the web app's **User access** view. Newly registered users remain pending; only email-confirmed accounts can be approved. The API uses the server-only `SUPABASE_SERVICE_ROLE_KEY` to manage Auth users. Keep that value only in Render's private environment (or a secured operator env file); never put it in `NEXT_PUBLIC_*`, frontend configuration, source control, or browser code. To promote the initial administrator manually, run `python scripts/promote_admin.py --email etiennetuyihamye@gmail.com` from `apps/api` with `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` set in the process environment. The script requires the account to exist and have confirmed its email, preserves unrelated app metadata, and does not set a password.
 
 ### Render deployment
 
