@@ -12,7 +12,7 @@ services:
       - key: AUTH_REQUIRED
         value: "true"
       - key: CORS_ORIGINS
-        value: https://titans-blue-seven.vercel.app,https://umutungo.vercel.app
+        value: https://umutungo-five.vercel.app
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL
