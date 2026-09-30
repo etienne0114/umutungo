@@ -14,7 +14,11 @@ class Base(DeclarativeBase):
 
 
 def make_engine(database_url: str | None = None):
-    url = database_url or os.getenv("DATABASE_URL", "sqlite:///./govasset.db")
+    url = database_url or os.getenv("DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL is required. Configure the Supabase PostgreSQL connection URL."
+        )
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
@@ -44,6 +48,10 @@ def initialize_schema(engine: Engine) -> None:
                 if schema is not None
                 else text("ALTER TABLE assets ADD COLUMN last_inspected_on DATE")
             )
+    from govasset_api.services.institution_catalog import sync_rwanda_government_catalog
+
+    with Session(engine) as session:
+        sync_rwanda_government_catalog(session)
 
 
 def session_dependency(factory: sessionmaker[Session]):

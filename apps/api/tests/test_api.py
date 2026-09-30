@@ -33,6 +33,33 @@ def create_asset(client: TestClient, **overrides):
     return client.post("/api/v1/assets", json=data)
 
 
+def set_claims(client: TestClient, monkeypatch, claims: dict):
+    from govasset_api import auth
+
+    monkeypatch.setenv("AUTH_REQUIRED", "true")
+    monkeypatch.setattr("govasset_api.main.supabase_admin_configured", lambda: False)
+    client.app.dependency_overrides[auth.require_authenticated_user] = lambda: claims
+
+
+def register_institution(client: TestClient, code: str, parent_id: int | None = None):
+    return client.post(
+        "/api/v1/admin/institutions",
+        json={
+            "name": f"Institution {code}",
+            "code": code,
+            "institution_type": "agency",
+            "parent_institution_id": parent_id,
+        },
+    )
+
+
+def register_membership(client: TestClient, user_id: str, institution_id: int, role: str):
+    return client.post(
+        "/api/v1/admin/memberships",
+        json={"user_id": user_id, "institution_id": institution_id, "role": role},
+    )
+
+
 def test_create_asset_and_reject_duplicate_code(client):
     first = create_asset(client)
     assert first.status_code == 201
@@ -444,6 +471,7 @@ def test_startup_adds_inspection_date_column_to_legacy_database(monkeypatch):
             """
             CREATE TABLE assets (
                 id INTEGER PRIMARY KEY,
+                institution_id INTEGER,
                 asset_code VARCHAR(80) NOT NULL UNIQUE,
                 asset_type VARCHAR(80) NOT NULL,
                 make VARCHAR(80),
@@ -523,7 +551,8 @@ def test_hosted_api_requires_supabase_authentication(client, monkeypatch):
         "/api/v1/assets",
         headers={"Authorization": "Bearer valid-test-token"},
     )
-    assert authenticated.status_code == 200
+    assert authenticated.status_code == 403
+    assert "no active institution membership" in authenticated.json()["detail"]
 
 
 def test_authentication_fails_closed_without_project_url(client, monkeypatch):
@@ -846,3 +875,389 @@ def test_supabase_admin_page_size_is_bounded():
 
     with pytest.raises(ValueError, match="cannot exceed 100"):
         supabase_admin.list_supabase_users_page(page=1, per_page=101)
+
+
+def test_institution_hierarchy_and_membership_administration(client, monkeypatch):
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "global-admin", "app_metadata": {"govasset_role": "admin"}},
+    )
+    parent = register_institution(client, "ROOT")
+    assert parent.status_code == 201
+    child = register_institution(client, "CHILD", parent.json()["id"])
+    assert child.status_code == 201
+    assert child.json()["parent_institution_id"] == parent.json()["id"]
+
+    assert register_institution(client, "ROOT").status_code == 409
+    assert (
+        client.post(
+            "/api/v1/admin/institutions",
+            json={
+                "name": "Missing parent",
+                "code": "MISSING-PARENT",
+                "institution_type": "agency",
+                "parent_institution_id": 9999,
+            },
+        ).status_code
+        == 422
+    )
+    cycle = client.patch(
+        f"/api/v1/admin/institutions/{parent.json()['id']}",
+        json={"parent_institution_id": child.json()["id"]},
+    )
+    assert cycle.status_code == 422
+    self_parent = client.patch(
+        f"/api/v1/admin/institutions/{parent.json()['id']}",
+        json={"parent_institution_id": parent.json()["id"]},
+    )
+    assert self_parent.status_code == 422
+
+    user_id = "8bb5e1ce-2620-4b79-91ce-a38c8b8799d1"
+    created = register_membership(client, user_id, child.json()["id"], "viewer")
+    assert created.status_code == 201
+    assert created.json()["role"] == "viewer"
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": user_id, "app_metadata": {"govasset_access": "approved"}},
+    )
+    available = client.get("/api/v1/institutions")
+    assert available.status_code == 200
+    assert available.json()[0]["membership_role"] == "viewer"
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "global-admin", "app_metadata": {"govasset_role": "admin"}},
+    )
+    assert register_membership(client, user_id, child.json()["id"], "driver").status_code == 409
+    updated = client.patch(
+        f"/api/v1/admin/memberships/{user_id}/{child.json()['id']}",
+        json={"role": "auditor"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["role"] == "auditor"
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": user_id, "app_metadata": {"govasset_access": "approved"}},
+    )
+    assert client.get("/api/v1/institutions").json()[0]["membership_role"] == "auditor"
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "global-admin", "app_metadata": {"govasset_role": "admin"}},
+    )
+    assert client.delete(
+        f"/api/v1/admin/memberships/{user_id}/{child.json()['id']}"
+    ).status_code == 204
+    assert client.get("/api/v1/admin/memberships").json() == []
+
+
+def test_system_admin_can_sync_the_verified_rwanda_institution_catalog(client, monkeypatch):
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "global-admin", "app_metadata": {"govasset_role": "admin"}},
+    )
+    first = client.post("/api/v1/admin/institutions/sync-official-catalog")
+    assert first.status_code == 200
+    summary = first.json()
+    assert summary["total"] > 0
+    assert summary["created"] + summary["updated"] + summary["unchanged"] == summary["total"]
+    assert summary["verified_on"] == "2026-09-30"
+    assert summary["source_urls"]
+
+    second = client.post("/api/v1/admin/institutions/sync-official-catalog")
+    assert second.status_code == 200
+    assert second.json()["created"] == 0
+    assert second.json()["updated"] == 0
+    assert second.json()["unchanged"] == summary["total"]
+
+    institutions = client.get("/api/v1/admin/institutions").json()
+    ministry = next(item for item in institutions if item["code"] == "MINALOC")
+    district = next(item for item in institutions if item["code"] == "DIST-GASABO")
+    assert ministry["is_official"] is True
+    assert ministry["source_url"] in summary["source_urls"]
+    assert district["institution_type"] == "district"
+    assert district["parent_institution_id"] is not None
+
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "non-admin", "app_metadata": {"govasset_access": "approved"}},
+    )
+    assert (
+        client.post("/api/v1/admin/institutions/sync-official-catalog").status_code
+        == 403
+    )
+
+
+def test_membership_assignment_verifies_supabase_approval_when_admin_api_is_configured(
+    client, monkeypatch
+):
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "global-admin", "app_metadata": {"govasset_role": "admin"}},
+    )
+    institution = register_institution(client, "VERIFIED-USER").json()
+    user_id = "efee9e51-3313-447f-8582-1e9261246c39"
+    monkeypatch.setattr("govasset_api.main.supabase_admin_configured", lambda: True)
+    monkeypatch.setattr(
+        "govasset_api.main.get_supabase_user",
+        lambda requested_id: {
+            "id": requested_id,
+            "app_metadata": {"govasset_access": "pending"},
+        },
+    )
+    pending = register_membership(client, user_id, institution["id"], "viewer")
+    assert pending.status_code == 409
+    assert "approved Supabase user" in pending.json()["detail"]
+
+    monkeypatch.setattr(
+        "govasset_api.main.get_supabase_user",
+        lambda requested_id: {
+            "id": requested_id,
+            "app_metadata": {"govasset_access": "approved"},
+        },
+    )
+    assert register_membership(client, user_id, institution["id"], "viewer").status_code == 201
+
+
+def test_tenant_data_isolation_for_assets_reports_exports_triage_and_events(
+    client, monkeypatch
+):
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "global-admin", "app_metadata": {"govasset_role": "admin"}},
+    )
+    first = register_institution(client, "TENANT-A").json()
+    second = register_institution(client, "TENANT-B").json()
+    user_a = "597b5925-ea3b-4195-aaf0-01f63230127c"
+    user_b = "137227bc-1e70-4f67-87fb-a0a0f92078b6"
+    assert register_membership(client, user_a, first["id"], "fleet_manager").status_code == 201
+    assert register_membership(client, user_b, second["id"], "fleet_manager").status_code == 201
+
+    legacy = create_asset(client, asset_code="LEGACY-NULL", condition="poor").json()
+    asset_a = client.post(
+        f"/api/v1/assets?institution_id={first['id']}",
+        json={
+            "asset_code": "TENANT-A-ASSET",
+            "asset_type": "vehicle",
+            "condition": "critical",
+            "institution_id": second["id"],
+        },
+    )
+    assert asset_a.status_code == 201
+    asset_a = asset_a.json()
+    asset_b = client.post(
+        f"/api/v1/assets?institution_id={second['id']}",
+        json={"asset_code": "TENANT-B-ASSET", "asset_type": "vehicle", "condition": "poor"},
+    ).json()
+    same_code_other_tenant = client.post(
+        f"/api/v1/assets?institution_id={second['id']}",
+        json={"asset_code": "TENANT-A-ASSET", "asset_type": "vehicle"},
+    )
+    assert same_code_other_tenant.status_code == 201
+    assert client.post(
+        f"/api/v1/assets/{asset_b['id']}/maintenance",
+        json={
+            "event_date": "2026-09-29",
+            "category": "tenant-b-private",
+            "description": "TENANT-B-MAINTENANCE",
+        },
+    ).status_code == 201
+    assert client.post(
+        f"/api/v1/assets/{asset_b['id']}/inspections",
+        json={
+            "inspected_on": "2026-09-29",
+            "condition": "poor",
+            "observations": "TENANT-B-INSPECTION",
+        },
+    ).status_code == 201
+    assert client.post(
+        f"/api/v1/assets?institution_id={second['id']}",
+        json={"asset_code": "TENANT-A-ASSET", "asset_type": "vehicle"},
+    ).status_code == 409
+
+    run_a = client.post("/api/v1/triage-runs?institution_id={}".format(first["id"])).json()
+    run_b = client.post("/api/v1/triage-runs?institution_id={}".format(second["id"])).json()
+    recommendations_b = client.get(
+        "/api/v1/recommendations", params={"run_id": run_b["id"]}
+    ).json()
+    rec_b = recommendations_b[0]
+    assert client.post(
+        f"/api/v1/recommendations/{rec_b['id']}/events",
+        json={
+            "event_type": "review",
+            "disposition": "accepted",
+            "reason": "Reviewed by the system administrator.",
+        },
+    ).status_code == 201
+
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": user_a, "app_metadata": {"govasset_access": "approved"}},
+    )
+    assert client.get("/api/v1/institutions").json()[0]["id"] == first["id"]
+    assert [row["asset_code"] for row in client.get("/api/v1/assets").json()] == [
+        "TENANT-A-ASSET"
+    ]
+    assert client.get("/api/v1/assets", params={"institution_id": second["id"]}).status_code == 403
+    assert client.get(f"/api/v1/assets/{asset_b['id']}").status_code == 404
+    assert client.post(
+        f"/api/v1/assets/{asset_b['id']}/maintenance",
+        json={"event_date": "2026-09-30", "category": "repair"},
+    ).status_code == 404
+    assert client.post(
+        f"/api/v1/assets/{asset_b['id']}/inspections",
+        json={"inspected_on": "2026-09-30", "condition": "good"},
+    ).status_code == 404
+    assert client.get(f"/api/v1/assets/{asset_b['id']}/maintenance").status_code == 404
+    assert client.get(f"/api/v1/assets/{asset_b['id']}/inspections").status_code == 404
+
+    report = client.get("/api/v1/reports/operations").json()
+    assert report["total_assets"] == 1
+    assert report["scope_institution_id"] == first["id"]
+    assert report["scope_name"] == "Institution TENANT-A"
+    assert report["maintenance_records"] == 0
+    assert report["inspection_records"] == 0
+    assert "LEGACY-NULL" not in client.get("/api/v1/exports/assets.csv").text
+    assert "TENANT-B-ASSET" not in client.get("/api/v1/exports/assets.csv").text
+    assert "TENANT-B-MAINTENANCE" not in client.get(
+        "/api/v1/exports/maintenance.csv"
+    ).text
+    assert "TENANT-B-INSPECTION" not in client.get(
+        "/api/v1/exports/inspections.csv"
+    ).text
+    assert "LEGACY-NULL" not in client.get("/api/v1/triage").text
+    runs = client.get("/api/v1/triage-runs").json()
+    assert [row["id"] for row in runs] == [run_a["id"]]
+    assert client.get(f"/api/v1/triage-runs/{run_b['id']}").status_code == 404
+    tenant_recommendations = client.get("/api/v1/recommendations").json()
+    assert len(tenant_recommendations) == 1
+    assert tenant_recommendations[0]["run_id"] == run_a["id"]
+    assert client.get(f"/api/v1/recommendations/{rec_b['id']}").status_code == 404
+    assert client.get(
+        f"/api/v1/recommendations/{rec_b['id']}/events"
+    ).status_code == 404
+    assert client.post(
+        f"/api/v1/recommendations/{rec_b['id']}/events",
+        json={
+            "event_type": "review",
+            "disposition": "accepted",
+            "reason": "Must not write across institution boundaries.",
+        },
+    ).status_code == 404
+
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "global-admin", "app_metadata": {"govasset_role": "admin"}},
+    )
+    assert len(client.get("/api/v1/assets").json()) == 4
+    assert legacy["id"] in {row["id"] for row in client.get("/api/v1/assets").json()}
+
+
+def test_membership_required_and_read_only_roles_cannot_mutate(client, monkeypatch):
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "user-without-membership", "app_metadata": {"govasset_access": "approved"}},
+    )
+    response = client.get("/api/v1/assets")
+    assert response.status_code == 403
+    assert "no active institution membership" in response.json()["detail"]
+
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": "global-admin", "app_metadata": {"govasset_role": "admin"}},
+    )
+    institution = register_institution(client, "VIEW-ONLY").json()
+    user_id = "bf32c33d-22fb-4fd5-93f8-4f2d9cd94bf5"
+    assert register_membership(client, user_id, institution["id"], "viewer").status_code == 201
+    asset = client.post(
+        f"/api/v1/assets?institution_id={institution['id']}",
+        json={"asset_code": "VIEW-ASSET", "asset_type": "vehicle"},
+    ).json()
+
+    set_claims(
+        client,
+        monkeypatch,
+        {"sub": user_id, "app_metadata": {"govasset_access": "approved"}},
+    )
+    denied_asset = client.post(
+        "/api/v1/assets",
+        json={
+            "asset_code": "FORGED",
+            "asset_type": "vehicle",
+            "institution_id": institution["id"],
+        },
+    )
+    assert denied_asset.status_code == 403
+    assert "read-only" in denied_asset.json()["detail"]
+    denied_maintenance = client.post(
+        f"/api/v1/assets/{asset['id']}/maintenance",
+        json={"event_date": "2026-09-30", "category": "repair"},
+    )
+    assert denied_maintenance.status_code == 403
+    assert client.get("/api/v1/admin/institutions").status_code == 403
+
+
+def test_tenant_migration_preserves_unassigned_legacy_rows_and_guards_cycles():
+    from importlib.util import module_from_spec, spec_from_file_location
+    from pathlib import Path
+
+    from alembic.migration import MigrationContext
+    from alembic.operations import Operations
+    from sqlalchemy import text
+
+    engine = create_engine("sqlite://")
+    migration_dir = Path(__file__).parents[1] / "migrations" / "versions"
+    with engine.begin() as connection:
+        with Operations.context(MigrationContext.configure(connection)):
+            for filename in (
+                "1ded697490a9_create_asset_maintenance_tables.py",
+                "5c27b67a1f4d_add_institution_tenancy.py",
+            ):
+                path = migration_dir / filename
+                spec = spec_from_file_location(path.stem, path)
+                module = module_from_spec(spec)
+                spec.loader.exec_module(module)
+                if filename.startswith("1ded"):
+                    module.upgrade()
+                    connection.execute(
+                        text(
+                            "INSERT INTO assets (asset_code, asset_type, condition, active, "
+                            "created_at) VALUES ('LEGACY-PRESERVED', 'vehicle', 'fair', 1, "
+                            "'2026-09-01 00:00:00')"
+                        )
+                    )
+                else:
+                    module.upgrade()
+        legacy = connection.execute(
+            text("SELECT asset_code, institution_id FROM assets")
+        ).one()
+        assert legacy == ("LEGACY-PRESERVED", None)
+
+        connection.execute(
+            text(
+                "INSERT INTO institutions (id, name, code, institution_type, active) "
+                "VALUES (1, 'Parent', 'PARENT', 'agency', 1)"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO institutions (id, name, code, institution_type, active, "
+                "parent_institution_id) VALUES (2, 'Child', 'CHILD', 'agency', 1, 1)"
+            )
+        )
+        with pytest.raises(Exception, match="institution hierarchy cycle"):
+            connection.execute(
+                text("UPDATE institutions SET parent_institution_id=2 WHERE id=1")
+            )
+    engine.dispose()

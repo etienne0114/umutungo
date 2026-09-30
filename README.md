@@ -1,7 +1,7 @@
 # Umutungo
 
-**Status:** Frontend is available on Vercel; the Render API is live for the local pilot
-**Purpose:** Help public-sector maintenance teams prioritize inspections and planned work using existing asset and maintenance data. The product is decision support; authorized people retain operational authority.
+**Status:** Institution-aware pilot under active development
+**Purpose:** Help public-sector maintenance teams prioritize inspections and planned work using authorized asset and maintenance data. Umutungo is decision support; authorized people retain operational and financial authority.
 
 ## Start here
 
@@ -10,23 +10,46 @@
 3. [Architecture and repository organization](docs/03-architecture-and-structure.md)
 4. [Data and predictive-analytics approach](docs/04-data-and-ml.md)
 5. [Roadmap and acceptance gates](docs/05-roadmap-and-acceptance.md)
-6. [Project configuration](project.yaml)
-7. [Original workshop and requirements inputs](docs/source/)
+6. [Implemented codebase guide](docs/06-codebase-guide.md)
+7. [Project configuration](project.yaml)
 8. [Pilot API and hosted setup](apps/api/README.md)
 9. [Web application](apps/web/README.md)
 
 ## Project principle
 
-Prove that the institution has usable, authorized, sufficiently complete data and a maintenance workflow that can act on recommendations before investing in a predictive model. Begin with transparent rules and descriptive analytics; add a model only when historical outcomes and time-based evaluation support it.
+Prove that an institution has usable, authorized, sufficiently complete data and a maintenance workflow that can act on recommendations before investing in a predictive model. Begin with transparent rules and descriptive analytics; add a trained model only when historical outcomes and time-based evaluation support it.
 
-The platform must complement—not replace or duplicate—official asset, fleet, finance, or inventory systems. The integration boundary and system of record for each field must be agreed with the pilot institution before implementation.
+The platform must complement—not replace or duplicate—official asset, fleet, finance, or inventory systems. The integration boundary and system of record for each field must be agreed with the responsible institution before implementation.
 
-## Current maturity
+## Current implementation
 
-This repository contains the project definition, a local API prototype, and a Next.js dashboard. The frontend is deployed to Vercel at `https://umutungo7.vercel.app` and supports invitation-only Supabase sign-in; hosted API requests verify Supabase access tokens and require an administrator-approved account. The Render Python service is configured at `https://umutungo.onrender.com`; its database connection must use the Supabase Session Pooler (IPv4) for Render to reach PostgreSQL. The product does not run AI models and is not approved for operational data or network deployment.
+The repository contains a FastAPI service and a Next.js dashboard. Supabase provides identity and account approval; Supabase PostgreSQL owns the sourced Rwanda government-institution hierarchy, institution memberships, assets, inspections, maintenance history, recommendation snapshots, and human review/outcome events.
 
-The dashboard includes asset history, rule-based maintenance triage, recommendation review, administrator-managed access, descriptive data-quality/operations reporting and bounded CSV exports. Usage readings, costs, parts, work-order status, source import lineage, tenant isolation and predictive modeling remain unimplemented or gated on institutional discovery, approved data and governance.
+The API enforces institution scope before data access. A system administrator can manage institution records and memberships. Institution roles cannot cross into another tenant by changing an `institution_id` request value, and read-only roles cannot mutate operational data. Asset codes are unique inside an institution rather than globally.
+
+Maintenance triage is currently a deterministic, versioned rule set based on recorded condition and service dates. It is explicitly advisory—not a trained predictive model, mechanical diagnosis, confirmed failure, or repair authorization. Usage readings, drivers and assignments, inventory, costs, audit logs, persisted rule configuration, notifications, and trained predictive analytics are not presented as implemented features.
+
+## Run and verify
+
+Start the full local application from `apps/web`:
+
+```bash
+npm run dev
+```
+
+Run the backend and frontend verification separately:
+
+```bash
+cd apps/api
+../../.venv/bin/pytest -q
+
+cd ../web
+npm run lint
+npm run build
+```
+
+See the application-specific READMEs for environment variables, Supabase configuration, migrations, and deployment details. Never commit operational data, credentials, service-role keys, access tokens, or database connection strings.
 
 ## Source-of-truth policy
 
-The numbered documents in `docs/` are the maintained project specification. Files in `docs/source/` are preserved workshop/reference inputs. Update the specification when decisions change; do not maintain competing copies of requirements.
+The numbered documents in `docs/` are the maintained project specification. Files in `docs/source/` preserve original workshop and requirement inputs. Update the maintained specification when decisions change; do not create competing requirement copies or parallel application modules.

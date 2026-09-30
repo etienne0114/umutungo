@@ -30,7 +30,7 @@ def main() -> int:
     parser.add_argument(
         "--env-file",
         type=Path,
-        help="Optional ignored env file containing SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+        help="Optional ignored env file containing SUPABASE_URL and a Supabase server secret key.",
     )
     args = parser.parse_args()
     if args.env_file:

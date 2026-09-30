@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from enum import StrEnum
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -38,6 +39,96 @@ class VerifiedOutcome(StrEnum):
     OTHER = "other"
 
 
+class InstitutionType(StrEnum):
+    MINISTRY = "ministry"
+    AGENCY = "agency"
+    AUTHORITY = "authority"
+    COMMISSION = "commission"
+    PUBLIC_INSTITUTION = "public_institution"
+    OTHER_GOVERNMENT_ENTITY = "other_government_entity"
+    PROVINCE = "province"
+    CITY = "city"
+    DISTRICT = "district"
+
+
+class InstitutionRole(StrEnum):
+    INSTITUTION_ADMIN = "institution_admin"
+    FLEET_MANAGER = "fleet_manager"
+    MAINTENANCE_OFFICER = "maintenance_officer"
+    TECHNICIAN = "technician"
+    DRIVER = "driver"
+    AUDITOR = "auditor"
+    VIEWER = "viewer"
+
+
+class InstitutionCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str = Field(min_length=1, max_length=200)
+    code: str = Field(min_length=1, max_length=80)
+    short_name: str | None = Field(default=None, max_length=80)
+    description: str | None = Field(default=None, max_length=1000)
+    institution_type: InstitutionType
+    active: bool = True
+    parent_institution_id: int | None = None
+
+
+class InstitutionUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    code: str | None = Field(default=None, min_length=1, max_length=80)
+    short_name: str | None = Field(default=None, max_length=80)
+    description: str | None = Field(default=None, max_length=1000)
+    institution_type: InstitutionType | None = None
+    active: bool | None = None
+    parent_institution_id: int | None = None
+
+
+class InstitutionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+    code: str
+    short_name: str | None
+    institution_type: InstitutionType
+    active: bool
+    is_official: bool
+    description: str | None
+    source_url: str | None
+    source_verified_on: date | None
+    parent_institution_id: int | None
+    membership_role: InstitutionRole | None = None
+
+
+class CatalogSyncRead(BaseModel):
+    created: int
+    updated: int
+    unchanged: int
+    total: int
+    verified_on: date
+    source_urls: list[str]
+
+
+class InstitutionMembershipCreate(BaseModel):
+    user_id: UUID
+    institution_id: int
+    role: InstitutionRole
+
+
+class InstitutionMembershipUpdate(BaseModel):
+    role: InstitutionRole
+
+
+class InstitutionMembershipRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: str
+    institution_id: int
+    role: InstitutionRole
+
+
 class AssetCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -66,6 +157,7 @@ class AssetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    institution_id: int | None
     asset_code: str
     asset_type: str
     make: str | None
@@ -138,6 +230,7 @@ class TriageItem(BaseModel):
 
 class TriageRunRead(BaseModel):
     id: int
+    institution_id: int | None = None
     evaluated_on: date
     rule_version: str
     created_at: datetime
@@ -211,6 +304,9 @@ class AdminAccessUpdate(BaseModel):
 
 class OperationsReport(BaseModel):
     generated_on: date
+    scope_institution_id: int | None
+    scope_name: str
+    included_institutions: int
     total_assets: int
     active_assets: int
     inactive_assets: int
@@ -231,3 +327,16 @@ class OperationsReport(BaseModel):
     downtime_hours_recorded: float
     maintenance_records_without_downtime: int
     untracked_domains: list[str]
+
+
+class InstitutionReportRow(BaseModel):
+    institution: InstitutionRead
+    descendant_count: int
+    report: OperationsReport
+
+
+class InstitutionTreeReport(BaseModel):
+    generated_on: date
+    root_count: int
+    unassigned_assets: int
+    rows: list[InstitutionReportRow]

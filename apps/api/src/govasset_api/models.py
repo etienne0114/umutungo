@@ -2,6 +2,7 @@ from datetime import date, datetime, timezone
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     Float,
@@ -9,7 +10,9 @@ from sqlalchemy import (
     JSON,
     String,
     Text,
+    Index,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -18,9 +21,23 @@ from govasset_api.database import Base
 
 class Asset(Base):
     __tablename__ = "assets"
+    __table_args__ = (
+        UniqueConstraint("institution_id", "asset_code", name="uq_assets_institution_code"),
+        Index(
+            "uq_assets_unassigned_code",
+            "asset_code",
+            unique=True,
+            sqlite_where=text("institution_id IS NULL"),
+            postgresql_where=text("institution_id IS NULL"),
+        ),
+        Index("ix_assets_institution_id", "institution_id"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    asset_code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="SET NULL"), nullable=True
+    )
+    asset_code: Mapped[str] = mapped_column(String(80))
     asset_type: Mapped[str] = mapped_column(String(80), index=True)
     make: Mapped[str | None] = mapped_column(String(80), nullable=True)
     model: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -75,8 +92,12 @@ class InspectionRecord(Base):
 
 class TriageRun(Base):
     __tablename__ = "triage_runs"
+    __table_args__ = (Index("ix_triage_runs_institution_id", "institution_id"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="SET NULL"), nullable=True
+    )
     evaluated_on: Mapped[date] = mapped_column(Date, index=True)
     rule_version: Mapped[str] = mapped_column(String(80))
     created_at: Mapped[datetime] = mapped_column(
@@ -127,3 +148,60 @@ class RecommendationEvent(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     recommendation: Mapped[Recommendation] = relationship(back_populates="events")
+
+
+class Institution(Base):
+    __tablename__ = "institutions"
+    __table_args__ = (
+        UniqueConstraint("code", name="uq_institutions_code"),
+        Index("ix_institutions_parent_id", "parent_institution_id"),
+        Index("ix_institutions_active", "active"),
+        CheckConstraint(
+            "institution_type IN ('ministry', 'agency', 'authority', 'commission', "
+            "'public_institution', 'other_government_entity', 'province', 'city', "
+            "'district')",
+            name="ck_institutions_type",
+        ),
+        CheckConstraint(
+            "parent_institution_id IS NULL OR parent_institution_id != id",
+            name="ck_institutions_not_own_parent",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200))
+    code: Mapped[str] = mapped_column(String(80))
+    short_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    institution_type: Mapped[str] = mapped_column(String(40))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_official: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    source_verified_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    parent_institution_id: Mapped[int | None] = mapped_column(
+        ForeignKey("institutions.id", ondelete="RESTRICT"), nullable=True
+    )
+    parent: Mapped["Institution | None"] = relationship(
+        remote_side="Institution.id", back_populates="children"
+    )
+    children: Mapped[list["Institution"]] = relationship(back_populates="parent")
+
+
+class InstitutionMembership(Base):
+    __tablename__ = "institution_memberships"
+    __table_args__ = (
+        Index("ix_institution_memberships_institution_id", "institution_id"),
+        Index("ix_institution_memberships_user_id", "user_id"),
+        CheckConstraint(
+            "role IN ('institution_admin', 'fleet_manager', 'maintenance_officer', "
+            "'technician', 'driver', 'auditor', 'viewer')",
+            name="ck_institution_membership_role",
+        ),
+    )
+
+    user_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    institution_id: Mapped[int] = mapped_column(
+        ForeignKey("institutions.id", ondelete="CASCADE"), primary_key=True
+    )
+    role: Mapped[str] = mapped_column(String(40))
+    institution: Mapped[Institution] = relationship()

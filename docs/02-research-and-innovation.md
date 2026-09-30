@@ -65,6 +65,9 @@ Measure false-alert burden, missed-event cost, lead time and staff capacity alon
 - NIST, *Artificial Intelligence Risk Management Framework (AI RMF 1.0)*, NIST AI 100-1 (2023): <https://doi.org/10.6028/NIST.AI.100-1>. Voluntary, use-case-agnostic risk management framework; informs the project’s govern/map/measure/manage review, not Rwanda legal compliance.
 - NIST, AI RMF overview and current revision status: <https://www.nist.gov/itl/ai-risk-management-framework>. The page notes that AI RMF 1.0 is being revised; recheck before a formal governance baseline.
 - NIST, AI RMF Playbook: <https://www.nist.gov/itl/ai-risk-management-framework/nist-ai-rmf-playbook>. Practical voluntary suggestions for applying the framework.
+- Government of Rwanda ministry directory: <https://www.gov.rw/government/institutions/ministries>. Source for the dated central-government catalog snapshot; office-holder data is intentionally not stored.
+- Government of Rwanda local-government directory: <https://www.gov.rw/government/directory/local-government>. Source for the City of Kigali, four provinces, and 30 districts.
+- Government of Rwanda overview: <https://www.gov.rw/overview>. Cross-check for 19 ministries, four provinces plus the City of Kigali, and 30 districts.
 - Government of Rwanda portal: <https://www.gov.rw/>. A starting point for locating official services and agency contacts; not evidence for a particular system’s API or data availability.
 - Rwanda Law No. 058/2021 relating to the protection of personal data and privacy: locate and verify the authoritative current text through the [Rwanda laws portal](https://amategeko.gov.rw/) and [Rwanda Law Reform Commission](https://www.rlrc.gov.rw/mandate/laws-of-rwanda), then confirm implementing requirements and applicability with the institution’s legal/data-protection officer before processing. The source materials identify compliance as a constraint, but this repository does not provide a legal determination.
 

@@ -1,3 +1,5 @@
+import type { Institution } from "./institutions";
+
 export type AssetCondition = "good" | "fair" | "poor" | "critical" | "unknown";
 export type RiskLevel = "critical" | "high" | "medium" | "low" | "insufficient_data";
 export type Disposition = "accepted" | "deferred" | "rejected";
@@ -97,6 +99,9 @@ export interface AdminUser {
 
 export interface OperationsReport {
   generated_on: string;
+  scope_institution_id: number | null;
+  scope_name: string;
+  included_institutions: number;
   total_assets: number;
   active_assets: number;
   inactive_assets: number;
@@ -117,6 +122,19 @@ export interface OperationsReport {
   downtime_hours_recorded: number;
   maintenance_records_without_downtime: number;
   untracked_domains: string[];
+}
+
+export interface InstitutionReportRow {
+  institution: Institution;
+  descendant_count: number;
+  report: OperationsReport;
+}
+
+export interface InstitutionTreeReport {
+  generated_on: string;
+  root_count: number;
+  unassigned_assets: number;
+  rows: InstitutionReportRow[];
 }
 
 export interface AssetCreate {

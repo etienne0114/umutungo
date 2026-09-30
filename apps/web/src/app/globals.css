@@ -1,3 +1,5 @@
+@import url("./institution-reporting.css");
+
 :root {
   color-scheme: light;
   --ink: #172a3a;
@@ -392,6 +394,75 @@ svg {
 .local-badge span {
   width: 6px;
   height: 6px;
+}
+
+.local-badge .api-status-dot {
+  display: inline-block;
+  border-radius: 50%;
+  background: #87939b;
+}
+
+.local-badge .api-status-dot.online {
+  background: #27936f;
+  box-shadow: 0 0 0 3px #e3f3eb;
+}
+
+.local-badge .api-status-dot.offline {
+  background: #c74842;
+  box-shadow: 0 0 0 3px #fae7e5;
+}
+
+.local-badge .api-status-dot.checking {
+  background: #d49a35;
+  box-shadow: 0 0 0 3px #fbf0d9;
+}
+
+.institution-switcher {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #6f7f8b;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.institution-switcher small {
+  color: #87939b;
+  font-size: 9px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.institution-switcher select {
+  max-width: 190px;
+  border: 1px solid #e1e8e5;
+  border-radius: 7px;
+  background: #fff;
+  color: #314657;
+  font: inherit;
+  padding: 7px 9px;
+}
+
+.institution-required {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  max-width: 740px;
+  margin: 48px auto;
+  padding: 28px;
+}
+
+.institution-required h2 {
+  margin: 0 0 8px;
+  color: #273e4f;
+  font-size: 16px;
+}
+
+.institution-required p {
+  margin: 0;
+  color: #71808a;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
 .icon-button {
@@ -2188,6 +2259,18 @@ h3 {
   .local-badge span {
     width: 7px;
     height: 7px;
+  }
+
+  .institution-switcher > span {
+    display: none;
+  }
+
+  .institution-switcher select {
+    max-width: 120px;
+  }
+
+  .institution-switcher small {
+    display: none;
   }
 
   .metric-grid {

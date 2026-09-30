@@ -11,15 +11,31 @@ class SupabaseAdminError(Exception):
     pass
 
 
+def supabase_secret_key() -> str | None:
+    """Return Supabase's current secret key or the compatible legacy key."""
+
+    value = (
+        os.getenv("SUPABASE_SECRET_KEY", "").strip()
+        or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    )
+    return value or None
+
+
+def supabase_admin_configured() -> bool:
+    return bool(supabase_url() and supabase_secret_key())
+
+
 def _admin_request(path: str, method: str = "GET", payload: dict[str, Any] | None = None):
     project_url = supabase_url()
-    service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
-    if project_url is None or not service_key:
-        raise SupabaseAdminError("Supabase administrator API is not configured.")
+    secret_key = supabase_secret_key()
+    if project_url is None or not secret_key:
+        raise SupabaseAdminError(
+            "Supabase administrator API is not configured on the API server."
+        )
 
     headers = {
-        "apikey": service_key,
-        "Authorization": f"Bearer {service_key}",
+        "apikey": secret_key,
+        "Authorization": f"Bearer {secret_key}",
         "Accept": "application/json",
     }
     body = None

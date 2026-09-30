@@ -1,0 +1,423 @@
+.institution-management {
+  display: grid;
+  gap: 20px;
+}
+
+.institution-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.institution-summary-grid .access-summary-card small {
+  color: #8a98a2;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.institution-directory-panel {
+  overflow: hidden;
+}
+
+.institution-directory-heading {
+  gap: 20px;
+}
+
+.official-source-link {
+  flex: 0 0 auto;
+  color: #087a68;
+  font-size: 10px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.official-source-link:hover {
+  text-decoration: underline;
+}
+
+.institution-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid #edf0f2;
+  border-bottom: 1px solid #edf0f2;
+  background: #fbfcfc;
+  padding: 12px 18px;
+}
+
+.institution-search {
+  width: min(430px, 100%);
+}
+
+.institution-filter-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid #dfe6e9;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.institution-filter-tabs button {
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #6c7f8b;
+  cursor: pointer;
+  padding: 7px 10px;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.institution-filter-tabs button.active {
+  background: #e7f2ef;
+  color: #087a68;
+}
+
+.institution-tree-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  max-height: 820px;
+  overflow: auto;
+  padding: 16px;
+}
+
+.institution-tree-card {
+  align-self: start;
+  overflow: hidden;
+  border: 1px solid #e1e8eb;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.institution-tree-card > header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 14px;
+  border-bottom: 1px solid #edf1f2;
+  background: linear-gradient(135deg, #f7fbfa 0%, #fff 70%);
+}
+
+.institution-tree-card > header > div:nth-child(2) {
+  display: grid;
+  gap: 3px;
+}
+
+.institution-tree-card > header strong {
+  color: #203d4d;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.institution-tree-card > header span:not(.access-badge) {
+  color: #81909a;
+  font-size: 9px;
+}
+
+.institution-mark {
+  display: grid;
+  min-width: 46px;
+  height: 32px;
+  place-items: center;
+  border-radius: 7px;
+  background: #173f54;
+  color: #fff;
+  padding: 0 8px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+}
+
+.institution-note {
+  margin: 0;
+  border-bottom: 1px solid #edf1f2;
+  background: #fffaf2;
+  color: #78633f;
+  padding: 9px 14px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.institution-child-list {
+  display: grid;
+  max-height: 260px;
+  overflow: auto;
+  padding: 5px 14px;
+}
+
+.institution-child {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 43px;
+  border-bottom: 1px solid #f0f3f4;
+}
+
+.institution-child:last-child {
+  border-bottom: 0;
+}
+
+.institution-branch {
+  width: 9px;
+  height: 12px;
+  border-bottom: 1px solid #a8beb8;
+  border-left: 1px solid #a8beb8;
+}
+
+.institution-child > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.institution-child strong {
+  color: #2f4c5b;
+  font-size: 10px;
+}
+
+.institution-child span {
+  overflow: hidden;
+  color: #7d8d97;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.institution-child small {
+  color: #81909a;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
+.institution-no-children {
+  color: #8997a0;
+  padding: 14px 0;
+  font-size: 9px;
+}
+
+.institution-tree-card > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-top: 1px solid #edf1f2;
+  background: #fbfcfc;
+  padding: 9px 14px;
+}
+
+.institution-tree-card > footer > span {
+  color: #8a98a1;
+  font-size: 8px;
+}
+
+.institution-create-panel {
+  overflow: hidden;
+}
+
+.institution-create-panel summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  list-style: none;
+  padding: 16px 18px;
+}
+
+.institution-create-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.institution-create-panel summary > span:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.institution-create-panel summary strong {
+  color: #294555;
+  font-size: 12px;
+}
+
+.institution-create-panel summary small {
+  color: #84929c;
+  font-size: 9px;
+}
+
+.institution-create-panel[open] summary {
+  border-bottom: 1px solid #edf0f2;
+}
+
+.institution-create-panel .form-stack,
+.membership-form {
+  padding: 16px 18px 18px;
+}
+
+.institution-directory-warning,
+.institution-report-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border-top: 1px solid #f1dfbd;
+  border-bottom: 1px solid #f1dfbd;
+  background: #fffaf0;
+  color: #705b35;
+  padding: 12px 18px;
+}
+
+.institution-directory-warning svg,
+.institution-report-warning svg {
+  width: 15px;
+  flex: 0 0 auto;
+}
+
+.institution-directory-warning strong {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 10px;
+}
+
+.institution-directory-warning p {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.institution-directory-warning code {
+  font-size: 8px;
+}
+
+.report-heading-meta {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.report-scope-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border: 1px solid #cfe3dd;
+  border-radius: 9px;
+  background: #f2f8f6;
+  padding: 13px 16px;
+}
+
+.report-scope-banner > div {
+  display: grid;
+  gap: 3px;
+}
+
+.report-scope-banner span {
+  color: #648078;
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.report-scope-banner strong {
+  color: #1f5148;
+  font-size: 13px;
+}
+
+.report-scope-banner p {
+  margin: 0;
+  color: #648078;
+  font-size: 9px;
+}
+
+.institution-report-panel {
+  overflow: hidden;
+}
+
+.institution-report-warning {
+  align-items: center;
+  font-size: 9px;
+}
+
+.institution-report-table td {
+  vertical-align: middle;
+}
+
+.report-institution-cell {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 270px;
+}
+
+.report-institution-cell > span {
+  min-width: 52px;
+  border-radius: 5px;
+  background: #e6f1ee;
+  color: #147563;
+  padding: 5px 7px;
+  font-size: 8px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.report-institution-cell > div {
+  display: grid;
+  gap: 2px;
+}
+
+.report-institution-cell small,
+.table-subvalue {
+  display: block;
+  margin-top: 2px;
+  color: #8c99a1;
+  font-size: 8px;
+}
+
+@media (max-width: 1080px) {
+  .institution-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .institution-tree-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .institution-toolbar,
+  .report-scope-banner,
+  .report-heading-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .institution-filter-tabs {
+    overflow-x: auto;
+  }
+
+  .institution-filter-tabs button {
+    min-width: max-content;
+  }
+
+  .institution-tree-grid {
+    max-height: none;
+    padding: 11px;
+  }
+}
+
+@media (max-width: 430px) {
+  .institution-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .institution-tree-card > header {
+    grid-template-columns: auto 1fr;
+  }
+
+  .institution-tree-card > header .access-badge {
+    grid-column: 2;
+    width: max-content;
+  }
+}

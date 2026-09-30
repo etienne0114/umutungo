@@ -13,9 +13,11 @@ import Link from "next/link";
 import type { User } from "@supabase/supabase-js";
 import { Icon, IconName } from "@/components/icons";
 import { AccessManagement } from "@/features/admin/access-management";
+import { InstitutionManagement } from "@/features/admin/institution-management";
 import { ProfilePanel, avatarInitials } from "@/features/profile/profile-panel";
 import { OperationsReportView } from "@/features/reports/operations-report";
-import { api } from "@/lib/api/client";
+import { api, setActiveInstitutionId } from "@/lib/api/client";
+import type { Institution } from "@/lib/api/institutions";
 import type {
   Asset,
   AssetCondition,
@@ -30,9 +32,9 @@ import type {
   TriageItem,
 } from "@/lib/api/types";
 
-type View = "overview" | "assets" | "recommendations" | "reports" | "users";
+type View = "overview" | "assets" | "recommendations" | "reports" | "institutions" | "users";
 
-const navigation: { id: Exclude<View, "users">; label: string; icon: IconName }[] = [
+const navigation: { id: Exclude<View, "users" | "institutions">; label: string; icon: IconName }[] = [
   { id: "overview", label: "Overview", icon: "overview" },
   { id: "assets", label: "Asset register", icon: "assets" },
   { id: "recommendations", label: "Recommendations", icon: "recommendations" },
@@ -68,6 +70,10 @@ export function Dashboard({
   onSignOut: () => Promise<void>;
 }) {
   const [view, setView] = useState<View>("overview");
+  const [institutions, setInstitutions] = useState<Institution[]>([]);
+  const [activeInstitutionId, setSelectedInstitutionId] = useState<number | null>(null);
+  const [scopeReady, setScopeReady] = useState(false);
+  const [apiStatus, setApiStatus] = useState<"checking" | "online" | "offline">("checking");
   const [assets, setAssets] = useState<Asset[]>([]);
   const [triage, setTriage] = useState<TriageItem[]>([]);
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -94,6 +100,49 @@ export function Dashboard({
       : email;
   const isApproved = user.app_metadata.govasset_access === "approved";
   const isAdmin = user.app_metadata.govasset_role === "admin";
+  const localDevelopment = process.env.NEXT_PUBLIC_AUTH_REQUIRED === "false";
+  const activeRole =
+    institutions.find((institution) => institution.id === activeInstitutionId)?.membership_role ??
+    null;
+  const institutionSelectionRequired =
+    !isAdmin && institutions.length > 1 && activeInstitutionId === null;
+  const canRegisterAssets =
+    isAdmin || localDevelopment || ["institution_admin", "fleet_manager"].includes(activeRole ?? "");
+  const canRecordMaintenance =
+    isAdmin ||
+    localDevelopment ||
+    ["institution_admin", "fleet_manager", "maintenance_officer", "technician"].includes(
+      activeRole ?? "",
+    );
+  const canRecordInspections =
+    isAdmin ||
+    localDevelopment ||
+    ["institution_admin", "fleet_manager", "maintenance_officer", "technician"].includes(
+      activeRole ?? "",
+    );
+  const canRunTriage =
+    isAdmin ||
+    localDevelopment ||
+    ["institution_admin", "fleet_manager", "maintenance_officer"].includes(activeRole ?? "");
+  const canReviewRecommendations =
+    isAdmin ||
+    localDevelopment ||
+    ["institution_admin", "fleet_manager", "maintenance_officer"].includes(activeRole ?? "");
+  const canRecordRecommendationOutcomes =
+    isAdmin ||
+    localDevelopment ||
+    ["institution_admin", "fleet_manager", "maintenance_officer", "technician"].includes(
+      activeRole ?? "",
+    );
+
+  const checkBackend = useCallback(async () => {
+    try {
+      await api.checkApiHealth();
+      setApiStatus("online");
+    } catch {
+      setApiStatus("offline");
+    }
+  }, []);
 
   const fetchDashboardData = useCallback(
     () => Promise.all([api.listAssets(), api.listTriage()]),
@@ -120,24 +169,99 @@ export function Dashboard({
 
   useEffect(() => {
     let cancelled = false;
-    fetchDashboardData()
-      .then(([nextAssets, nextTriage]) => {
+    setActiveInstitutionId(null);
+    async function initializeDashboard() {
+      try {
+        const nextInstitutions = await api.listInstitutions();
+        if (cancelled) return;
+        const selectable = nextInstitutions.filter((institution) => institution.active);
+        setInstitutions(nextInstitutions);
+        const savedId = Number(window.localStorage.getItem("umutungo.institutionId"));
+        const savedInstitution = selectable.find((institution) => institution.id === savedId);
+        const selectedId =
+          savedInstitution?.id ??
+          (!isAdmin && selectable.length === 1 ? selectable[0].id : null);
+
+        setSelectedInstitutionId(selectedId);
+        setActiveInstitutionId(selectedId);
+        if (selectedId === null) {
+          window.localStorage.removeItem("umutungo.institutionId");
+        } else {
+          window.localStorage.setItem("umutungo.institutionId", String(selectedId));
+        }
+
+        if (!isAdmin && selectable.length > 1 && selectedId === null) return;
+
+        const [nextAssets, nextTriage] = await fetchDashboardData();
         if (!cancelled) {
           setAssets(nextAssets);
           setTriage(nextTriage);
           setError("");
         }
-      })
-      .catch((loadError: unknown) => {
+      } catch (loadError) {
         if (!cancelled) setError(getErrorMessage(loadError));
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+          setScopeReady(true);
+        }
+      }
+    }
+    void initializeDashboard();
     return () => {
       cancelled = true;
     };
-  }, [fetchDashboardData]);
+  }, [fetchDashboardData, isAdmin]);
+
+  useEffect(() => {
+    const initialCheck = window.setTimeout(() => void checkBackend(), 0);
+    const interval = window.setInterval(() => void checkBackend(), 30_000);
+    return () => {
+      window.clearTimeout(initialCheck);
+      window.clearInterval(interval);
+    };
+  }, [checkBackend]);
+
+  async function refreshWorkspace() {
+    setApiStatus("checking");
+    await Promise.all([checkBackend(), loadData(true)]);
+  }
+
+  async function changeInstitution(value: string) {
+    const institutionId = value ? Number(value) : null;
+    setSelectedInstitutionId(institutionId);
+    setActiveInstitutionId(institutionId);
+    setAssets([]);
+    setTriage([]);
+    setRecommendations([]);
+    setRuns([]);
+    setActiveRun(null);
+    setSelectedAsset(null);
+    setSelectedRecommendation(null);
+    setError("");
+    setNotice("");
+
+    if (institutionId === null) {
+      window.localStorage.removeItem("umutungo.institutionId");
+      if (!isAdmin && institutions.filter((institution) => institution.active).length > 1) {
+        setLoading(false);
+        return;
+      }
+    } else {
+      window.localStorage.setItem("umutungo.institutionId", String(institutionId));
+    }
+
+    setLoading(true);
+    await loadData();
+  }
+
+  function beginAssetCreation() {
+    if (institutions.length > 0 && activeInstitutionId === null) {
+      setError("Select an institution before registering an asset.");
+      return;
+    }
+    setShowAssetForm(true);
+  }
 
   const filteredTriage = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
@@ -282,7 +406,10 @@ export function Dashboard({
         </Link>
         <div className="workspace-label">WORKSPACE</div>
         <nav className="primary-nav" aria-label="Main navigation">
-          {[...navigation, ...(isAdmin ? [{ id: "users" as const, label: "User access", icon: "users" as const }] : [])].map((item) => (
+          {[...navigation, ...(isAdmin ? [
+            { id: "institutions" as const, label: "Institutions", icon: "assets" as const },
+            { id: "users" as const, label: "User access", icon: "users" as const },
+          ] : [])].map((item) => (
             <button
               className={`nav-item ${view === item.id ? "active" : ""}`}
               key={item.id}
@@ -340,18 +467,52 @@ export function Dashboard({
                     ? "Recommendations"
                       : view === "reports"
                         ? "Data quality"
-                        : "User access"}
+                        : view === "institutions"
+                          ? "Institutions"
+                          : "User access"}
             </strong>
           </div>
           <div className="topbar-actions">
             <span className="local-badge">
-              <span /> Local pilot
+              <span className={`api-status-dot ${apiStatus}`} />
+              {apiStatus === "checking"
+                ? "Checking API"
+                : apiStatus === "online"
+                  ? "API online"
+                  : "API offline"}
             </span>
+            {institutions.length > 0 && (
+              <label className="institution-switcher">
+                <span>Institution</span>
+                <select
+                  aria-label="Select institution"
+                  disabled={!scopeReady || loading}
+                  onChange={(event) => void changeInstitution(event.currentTarget.value)}
+                  value={activeInstitutionId ?? ""}
+                >
+                  {isAdmin && <option value="">All institutions</option>}
+                  {!isAdmin && institutionSelectionRequired && (
+                    <option value="">Select an institution</option>
+                  )}
+                  {institutions
+                    .filter((institution) => institution.active)
+                    .map((institution) => (
+                      <option key={institution.id} value={institution.id}>
+                        {institution.name}
+                      </option>
+                    ))}
+                </select>
+                {activeInstitutionId !== null && activeRole && (
+                    <small>{titleCase(activeRole)}</small>
+                )}
+                {activeInstitutionId !== null && isAdmin && <small>System admin</small>}
+              </label>
+            )}
             <button
               aria-label="Refresh data"
               className={`icon-button ${refreshing ? "spinning" : ""}`}
               disabled={refreshing || loading}
-              onClick={() => void loadData(true)}
+              onClick={() => void refreshWorkspace()}
               type="button"
             >
               <Icon name="refresh" />
@@ -393,14 +554,35 @@ export function Dashboard({
               </button>
             </div>
           )}
+          {institutionSelectionRequired && (
+            <div className="feedback-banner" role="status">
+              <Icon name="activity" />
+              <span>Select an institution to view its assets and maintenance information.</span>
+            </div>
+          )}
 
-          {view === "overview" && (
+          {institutionSelectionRequired && (
+            <section className="panel institution-required">
+              <span className="metric-icon amber"><Icon name="assets" /></span>
+              <div>
+                <h2>Select an institution to continue</h2>
+                <p>
+                  Your account belongs to more than one institution. Choose one above to load
+                  authorized assets, reports, and maintenance history.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {view === "overview" && !institutionSelectionRequired && (
             <Overview
               assets={assets}
               busy={busy}
+              canRegisterAssets={canRegisterAssets}
+              canRunTriage={canRunTriage}
               filteredTriage={filteredTriage}
               loading={loading}
-              onAddAsset={() => setShowAssetForm(true)}
+              onAddAsset={beginAssetCreation}
               onGenerate={() => void generateRecommendations()}
               onOpenAsset={(asset) => void openAsset(asset)}
               onRiskFilter={setRiskFilter}
@@ -415,20 +597,22 @@ export function Dashboard({
               triage={triage}
             />
           )}
-          {view === "assets" && (
+          {view === "assets" && !institutionSelectionRequired && (
             <AssetRegister
               assets={filteredAssets}
+              canRegisterAssets={canRegisterAssets}
               loading={loading}
-              onAdd={() => setShowAssetForm(true)}
+              onAdd={beginAssetCreation}
               onOpen={(asset) => void openAsset(asset)}
               onSearch={setSearch}
               search={search}
             />
           )}
-          {view === "recommendations" && (
+          {view === "recommendations" && !institutionSelectionRequired && (
             <RecommendationList
               activeRun={activeRun}
               busy={busy}
+              canRunTriage={canRunTriage}
               onGenerate={() => void generateRecommendations()}
               onLoadLatest={() => void loadLatestRecommendations()}
               onOpen={(recommendation) => void openRecommendation(recommendation)}
@@ -437,14 +621,19 @@ export function Dashboard({
               runs={runs}
             />
           )}
+          {view === "institutions" && isAdmin && <InstitutionManagement />}
           {view === "users" && isAdmin && <AccessManagement currentUserId={user.id} />}
-          {view === "reports" && <OperationsReportView />}
+          {view === "reports" && !institutionSelectionRequired && (
+            <OperationsReportView isAdmin={isAdmin} key={activeInstitutionId ?? "all-institutions"} />
+          )}
         </div>
       </main>
 
       {selectedAsset && (
         <AssetDrawer
           asset={selectedAsset}
+          canRecordInspections={canRecordInspections}
+          canRecordMaintenance={canRecordMaintenance}
           onClose={() => setSelectedAsset(null)}
           onError={reportError}
           onSaved={async (message) => {
@@ -457,6 +646,8 @@ export function Dashboard({
       {selectedRecommendation && (
         <RecommendationDrawer
           recommendation={selectedRecommendation}
+          canRecordOutcome={canRecordRecommendationOutcomes}
+          canReview={canReviewRecommendations}
           onClose={() => setSelectedRecommendation(null)}
           onError={(message) => setError(message)}
           onSaved={(message) => setNotice(message)}
@@ -501,6 +692,8 @@ export function Dashboard({
 function Overview({
   assets,
   busy,
+  canRegisterAssets,
+  canRunTriage,
   filteredTriage,
   loading,
   onAddAsset,
@@ -516,6 +709,8 @@ function Overview({
 }: {
   assets: Asset[];
   busy: boolean;
+  canRegisterAssets: boolean;
+  canRunTriage: boolean;
   filteredTriage: TriageItem[];
   loading: boolean;
   onAddAsset: () => void;
@@ -548,18 +743,22 @@ function Overview({
           </p>
         </div>
         <div className="heading-actions">
-          <button className="button button-secondary" onClick={onAddAsset} type="button">
-            <Icon name="plus" /> Add asset
-          </button>
-          <button
-            className="button button-primary"
-            disabled={busy || loading || assets.length === 0}
-            onClick={onGenerate}
-            type="button"
-          >
-            <Icon name="activity" />
-            {busy ? "Generating…" : "Save triage run"}
-          </button>
+          {canRegisterAssets && (
+            <button className="button button-secondary" onClick={onAddAsset} type="button">
+              <Icon name="plus" /> Add asset
+            </button>
+          )}
+          {canRunTriage && (
+            <button
+              className="button button-primary"
+              disabled={busy || loading || assets.length === 0}
+              onClick={onGenerate}
+              type="button"
+            >
+              <Icon name="activity" />
+              {busy ? "Generating…" : "Save triage run"}
+            </button>
+          )}
         </div>
       </section>
 
@@ -569,7 +768,7 @@ function Overview({
           icon="assets"
           label="Active assets"
           value={loading ? "—" : assets.length.toLocaleString()}
-          foot={<span className="metric-foot neutral">In the local register</span>}
+          foot={<span className="metric-foot neutral">In the selected institution</span>}
         />
         <MetricCard
           accent="red"
@@ -654,7 +853,13 @@ function Overview({
         {!loading && filteredTriage.length === 0 && (
           <EmptyState
             title={triage.length ? "No matching assets" : "No assets in the triage queue"}
-            detail={triage.length ? "Try another search or priority filter." : "Add assets to begin reviewing maintenance priorities."}
+            detail={
+              triage.length
+                ? "Try another search or priority filter."
+                : canRegisterAssets
+                  ? "Add assets to begin reviewing maintenance priorities."
+                  : "No active assets have been registered for this institution."
+            }
           />
         )}
         <div className="table-footer">
@@ -748,6 +953,7 @@ function TriageTable({
 
 function AssetRegister({
   assets,
+  canRegisterAssets,
   loading,
   onAdd,
   onOpen,
@@ -755,6 +961,7 @@ function AssetRegister({
   search,
 }: {
   assets: Asset[];
+  canRegisterAssets: boolean;
   loading: boolean;
   onAdd: () => void;
   onOpen: (asset: Asset) => void;
@@ -769,9 +976,11 @@ function AssetRegister({
           <h1>Asset register</h1>
           <p className="page-subtitle">Browse active assets and review their recorded history.</p>
         </div>
-        <button className="button button-primary" onClick={onAdd} type="button">
-          <Icon name="plus" /> Add asset
-        </button>
+        {canRegisterAssets && (
+          <button className="button button-primary" onClick={onAdd} type="button">
+            <Icon name="plus" /> Add asset
+          </button>
+        )}
       </section>
       <section className="panel queue-panel">
         <div className="panel-heading">
@@ -780,7 +989,7 @@ function AssetRegister({
               <h2>Registered assets</h2>
               <span className="count-pill">{assets.length}</span>
             </div>
-            <p>Asset details are kept in this prototype&apos;s local database.</p>
+            <p>Review active asset records and their verified maintenance history.</p>
           </div>
         </div>
         <div className="table-toolbar">
@@ -831,6 +1040,7 @@ function AssetRegister({
 function RecommendationList({
   activeRun,
   busy,
+  canRunTriage,
   onGenerate,
   onLoadLatest,
   onOpen,
@@ -840,6 +1050,7 @@ function RecommendationList({
 }: {
   activeRun: number | null;
   busy: boolean;
+  canRunTriage: boolean;
   onGenerate: () => void;
   onLoadLatest: () => void;
   onOpen: (recommendation: Recommendation) => void;
@@ -866,9 +1077,11 @@ function RecommendationList({
           <button className="button button-secondary" disabled={busy} onClick={onLoadLatest} type="button">
             <Icon name="clock" /> Load saved runs
           </button>
-          <button className="button button-primary" disabled={busy} onClick={onGenerate} type="button">
-            <Icon name="activity" /> {busy ? "Generating…" : "Save triage run"}
-          </button>
+          {canRunTriage && (
+            <button className="button button-primary" disabled={busy} onClick={onGenerate} type="button">
+              <Icon name="activity" /> {busy ? "Generating…" : "Save triage run"}
+            </button>
+          )}
         </div>
       </section>
       <div className="recommendation-callout">
@@ -907,7 +1120,14 @@ function RecommendationList({
           )}
         </div>
         {recommendations.length === 0 ? (
-          <EmptyState title="No recommendations loaded" detail="Generate a run or load saved recommendations from the local API." />
+          <EmptyState
+            title="No recommendations loaded"
+            detail={
+              canRunTriage
+                ? "Generate a triage run or load saved recommendations from the API."
+                : "No saved recommendations are available for this institution yet."
+            }
+          />
         ) : (
           <div className="table-scroll">
             <table className="data-table">
@@ -939,11 +1159,15 @@ function RecommendationList({
 
 function AssetDrawer({
   asset,
+  canRecordInspections,
+  canRecordMaintenance,
   onClose,
   onError,
   onSaved,
 }: {
   asset: Asset;
+  canRecordInspections: boolean;
+  canRecordMaintenance: boolean;
   onClose: () => void;
   onError: (message: string) => void;
   onSaved: (message: string) => Promise<void>;
@@ -1077,7 +1301,7 @@ function AssetDrawer({
             <HistorySection
               empty="No inspections have been recorded."
               isLoading={loadingHistory}
-              onAdd={() => setShowInspectionForm(true)}
+              onAdd={canRecordInspections ? () => setShowInspectionForm(true) : undefined}
               title="Inspection history"
             >
               {inspections.map((inspection) => (
@@ -1095,7 +1319,7 @@ function AssetDrawer({
             <HistorySection
               empty="No maintenance history has been recorded."
               isLoading={loadingHistory}
-              onAdd={() => setShowMaintenanceForm(true)}
+              onAdd={canRecordMaintenance ? () => setShowMaintenanceForm(true) : undefined}
               title="Maintenance history"
             >
               {maintenance.map((record) => (
@@ -1148,11 +1372,15 @@ function AssetDrawer({
 
 function RecommendationDrawer({
   recommendation,
+  canRecordOutcome,
+  canReview,
   onClose,
   onError,
   onSaved,
 }: {
   recommendation: Recommendation;
+  canRecordOutcome: boolean;
+  canReview: boolean;
   onClose: () => void;
   onError: (message: string) => void;
   onSaved: (message: string) => void;
@@ -1235,37 +1463,41 @@ function RecommendationDrawer({
               <p>{recommendation.recommended_action}</p>
             </div>
           </div>
-          <div className="detail-section">
-            <SectionTitle title="Staff review" />
-            <TextAreaField label="Review reason" name="review-reason" onChange={setReason} placeholder="Why accept, defer or reject this recommendation?" value={reason} />
-            <div className="disposition-actions">
-              {(["accepted", "deferred", "rejected"] as const).map((disposition) => (
-                <button
-                  className={`button ${disposition === "accepted" ? "button-primary" : "button-secondary"}`}
-                  disabled={busy}
-                  key={disposition}
-                  onClick={() => void submitReview(disposition)}
-                  type="button"
-                >
-                  {titleCase(disposition)}
-                </button>
-              ))}
+          {canReview && (
+            <div className="detail-section">
+              <SectionTitle title="Staff review" />
+              <TextAreaField label="Review reason" name="review-reason" onChange={setReason} placeholder="Why accept, defer or reject this recommendation?" value={reason} />
+              <div className="disposition-actions">
+                {(["accepted", "deferred", "rejected"] as const).map((disposition) => (
+                  <button
+                    className={`button ${disposition === "accepted" ? "button-primary" : "button-secondary"}`}
+                    disabled={busy}
+                    key={disposition}
+                    onClick={() => void submitReview(disposition)}
+                    type="button"
+                  >
+                    {titleCase(disposition)}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-          <div className="detail-section">
-            <SectionTitle title="Record verified outcome" />
-            <form className="form-stack compact-form" onSubmit={(event) => void submitOutcome(event)}>
-              <SelectField
-                label="Outcome"
-                name="outcome"
-                onChange={(value) => setOutcome(value as Outcome)}
-                options={["planned_maintenance", "unscheduled_repair", "no_maintenance_found", "other"]}
-              />
-              <Field label="Outcome date" max={new Date().toISOString().slice(0, 10)} name="outcome_date" onChange={setOutcomeDate} required type="date" value={outcomeDate} />
-              <TextAreaField label="Outcome notes" name="outcome_reason" onChange={setOutcomeReason} placeholder="Optional verified finding" value={outcomeReason} />
-              <button className="button button-secondary" disabled={busy} type="submit">{busy ? "Saving…" : "Save outcome"}</button>
-            </form>
-          </div>
+          )}
+          {canRecordOutcome && (
+            <div className="detail-section">
+              <SectionTitle title="Record verified outcome" />
+              <form className="form-stack compact-form" onSubmit={(event) => void submitOutcome(event)}>
+                <SelectField
+                  label="Outcome"
+                  name="outcome"
+                  onChange={(value) => setOutcome(value as Outcome)}
+                  options={["planned_maintenance", "unscheduled_repair", "no_maintenance_found", "other"]}
+                />
+                <Field label="Outcome date" max={new Date().toISOString().slice(0, 10)} name="outcome_date" onChange={setOutcomeDate} required type="date" value={outcomeDate} />
+                <TextAreaField label="Outcome notes" name="outcome_reason" onChange={setOutcomeReason} placeholder="Optional verified finding" value={outcomeReason} />
+                <button className="button button-secondary" disabled={busy} type="submit">{busy ? "Saving…" : "Save outcome"}</button>
+              </form>
+            </div>
+          )}
           <div className="detail-section">
             <SectionTitle title="Decision history" />
             {loadingEvents ? (
@@ -1328,14 +1560,18 @@ function HistorySection({
   children: ReactNode;
   empty: string;
   isLoading: boolean;
-  onAdd: () => void;
+  onAdd?: () => void;
   title: string;
 }) {
   return (
     <section>
       <div className="history-heading">
         <SectionTitle title={title} />
-        <button className="button button-secondary button-small" onClick={onAdd} type="button"><Icon name="plus" /> Add</button>
+        {onAdd && (
+          <button className="button button-secondary button-small" onClick={onAdd} type="button">
+            <Icon name="plus" /> Add
+          </button>
+        )}
       </div>
       {isLoading ? <div className="loading-state compact"><span className="spinner" /> Loading history…</div> : (
         <div className="history-list">
