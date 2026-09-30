@@ -153,6 +153,20 @@ class AssetCreate(BaseModel):
         return self
 
 
+class AssetUpdate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    asset_code: str | None = Field(default=None, min_length=1, max_length=80)
+    asset_type: str | None = Field(default=None, min_length=1, max_length=80)
+    make: str | None = Field(default=None, max_length=80)
+    model: str | None = Field(default=None, max_length=80)
+    acquisition_date: date | None = None
+    last_service_date: date | None = None
+    next_service_due: date | None = None
+    condition: AssetCondition | None = None
+    active: bool | None = None
+
+
 class AssetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -149,6 +149,8 @@ export interface AssetCreate {
   active?: boolean;
 }
 
+export type AssetUpdate = Partial<AssetCreate>;
+
 export interface MaintenanceCreate {
   event_date: string;
   category: string;

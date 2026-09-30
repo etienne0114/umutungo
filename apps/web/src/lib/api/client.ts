@@ -1,6 +1,7 @@
 import type {
   Asset,
   AssetCreate,
+  AssetUpdate,
   AdminUser,
   Disposition,
   InspectionCreate,
@@ -230,6 +231,11 @@ export const api = {
   listAssets: () => request<Asset[]>("/api/v1/assets?active=true"),
   createAsset: (payload: AssetCreate) =>
     request<Asset>("/api/v1/assets", { method: "POST", body: JSON.stringify(payload) }),
+  updateAsset: (id: number, payload: AssetUpdate) =>
+    request<Asset>(`/api/v1/assets/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    }),
   getAsset: (id: number) => request<Asset>(`/api/v1/assets/${id}`),
   listTriage: (riskLevel?: RiskLevel) =>
     request<TriageItem[]>(`/api/v1/triage${queryString({ risk_level: riskLevel })}`),

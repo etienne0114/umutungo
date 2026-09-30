@@ -632,6 +632,7 @@ export function Dashboard({
       {selectedAsset && (
         <AssetDrawer
           asset={selectedAsset}
+          canEditAsset={canRegisterAssets}
           canRecordInspections={canRecordInspections}
           canRecordMaintenance={canRecordMaintenance}
           onClose={() => setSelectedAsset(null)}
@@ -1159,6 +1160,7 @@ function RecommendationList({
 
 function AssetDrawer({
   asset,
+  canEditAsset,
   canRecordInspections,
   canRecordMaintenance,
   onClose,
@@ -1166,6 +1168,7 @@ function AssetDrawer({
   onSaved,
 }: {
   asset: Asset;
+  canEditAsset: boolean;
   canRecordInspections: boolean;
   canRecordMaintenance: boolean;
   onClose: () => void;
@@ -1178,6 +1181,7 @@ function AssetDrawer({
   const [loadedHistoryForAsset, setLoadedHistoryForAsset] = useState<Asset["id"] | null>(null);
   const loadingHistory = loadedHistoryForAsset !== asset.id;
   const [busy, setBusy] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
   const [showInspectionForm, setShowInspectionForm] = useState(false);
   const [showMaintenanceForm, setShowMaintenanceForm] = useState(false);
 
@@ -1200,6 +1204,31 @@ function AssetDrawer({
       cancelled = true;
     };
   }, [asset.id, onError]);
+
+  async function submitAssetUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    try {
+      await api.updateAsset(asset.id, {
+        asset_code: String(form.get("asset_code") ?? "").trim(),
+        asset_type: String(form.get("asset_type") ?? "").trim(),
+        make: String(form.get("make") ?? "").trim() || null,
+        model: String(form.get("model") ?? "").trim() || null,
+        acquisition_date: String(form.get("acquisition_date") ?? "") || null,
+        last_service_date: String(form.get("last_service_date") ?? "") || null,
+        next_service_due: String(form.get("next_service_due") ?? "") || null,
+        condition: String(form.get("condition") ?? "unknown") as AssetCondition,
+        active: form.get("active") === "on",
+      });
+      setShowEditForm(false);
+      await onSaved("Asset record updated.");
+    } catch (error) {
+      onError(getErrorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submitInspection(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1258,6 +1287,15 @@ function AssetDrawer({
         <div className="drawer-risk-row">
           <ConditionBadge condition={asset.condition} />
           <span className="small-muted">Current recorded condition</span>
+          {canEditAsset && (
+            <button
+              className="button button-secondary button-small"
+              onClick={() => setShowEditForm(true)}
+              type="button"
+            >
+              Edit asset
+            </button>
+          )}
         </div>
         <div className="drawer-tabs" role="tablist" aria-label="Asset record sections">
           {(["overview", "inspections", "maintenance"] as const).map((value) => (
@@ -1337,6 +1375,73 @@ function AssetDrawer({
         <div className="drawer-footer">
           <button className="button button-secondary full-width" onClick={onClose} type="button">Close profile</button>
         </div>
+        {showEditForm && (
+          <Modal title={`Edit ${asset.asset_code}`} onClose={() => setShowEditForm(false)}>
+            <form className="form-stack" onSubmit={(event) => void submitAssetUpdate(event)}>
+              <div className="form-grid">
+                <Field
+                  defaultValue={asset.asset_code}
+                  label="Asset code"
+                  maxLength={80}
+                  name="asset_code"
+                  required
+                />
+                <Field
+                  defaultValue={asset.asset_type}
+                  label="Asset type"
+                  maxLength={80}
+                  name="asset_type"
+                  required
+                />
+                <Field defaultValue={asset.make ?? ""} label="Make" maxLength={80} name="make" />
+                <Field defaultValue={asset.model ?? ""} label="Model" maxLength={80} name="model" />
+                <Field
+                  defaultValue={asset.acquisition_date ?? ""}
+                  label="Acquisition date"
+                  name="acquisition_date"
+                  type="date"
+                />
+                <SelectField
+                  defaultValue={asset.condition}
+                  label="Recorded condition"
+                  name="condition"
+                  options={["unknown", "good", "fair", "poor", "critical"]}
+                />
+                <Field
+                  defaultValue={asset.last_service_date ?? ""}
+                  label="Last service"
+                  name="last_service_date"
+                  type="date"
+                />
+                <Field
+                  defaultValue={asset.next_service_due ?? ""}
+                  label="Next service due"
+                  name="next_service_due"
+                  type="date"
+                />
+              </div>
+              <label className="checkbox-field">
+                <input defaultChecked={asset.active} name="active" type="checkbox" />
+                Asset is active
+              </label>
+              <p className="form-hint">
+                Deactivating an asset retains its history and removes it from active triage queues.
+              </p>
+              <div className="modal-actions">
+                <button
+                  className="button button-secondary"
+                  onClick={() => setShowEditForm(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button className="button button-primary" disabled={busy} type="submit">
+                  {busy ? "Saving…" : "Save changes"}
+                </button>
+              </div>
+            </form>
+          </Modal>
+        )}
         {showInspectionForm && (
           <Modal title="Record inspection" onClose={() => setShowInspectionForm(false)}>
             <form className="form-stack" onSubmit={(event) => void submitInspection(event)}>
@@ -1647,7 +1752,9 @@ function Modal({
 }
 
 function Field({
+  defaultValue,
   label,
+  maxLength,
   max,
   min,
   name,
@@ -1658,7 +1765,9 @@ function Field({
   type = "text",
   value,
 }: {
+  defaultValue?: string;
   label: string;
+  maxLength?: number;
   max?: string;
   min?: string;
   name: string;
@@ -1673,7 +1782,9 @@ function Field({
     <label className="field">
       <span>{label}{required && <b> *</b>}</span>
       <input
+        defaultValue={defaultValue}
         max={max}
+        maxLength={maxLength}
         min={min}
         name={name}
         onChange={onChange ? (event) => onChange(event.target.value) : undefined}
@@ -1688,11 +1799,13 @@ function Field({
 }
 
 function SelectField({
+  defaultValue,
   label,
   name,
   onChange,
   options,
 }: {
+  defaultValue?: string;
   label: string;
   name: string;
   onChange?: (value: string) => void;
@@ -1701,7 +1814,11 @@ function SelectField({
   return (
     <label className="field">
       <span>{label}</span>
-      <select defaultValue={options[0]} name={name} onChange={(event) => onChange?.(event.target.value)}>
+      <select
+        defaultValue={defaultValue ?? options[0]}
+        name={name}
+        onChange={(event) => onChange?.(event.target.value)}
+      >
         {options.map((option) => <option key={option} value={option}>{titleCase(option)}</option>)}
       </select>
     </label>

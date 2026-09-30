@@ -15,6 +15,7 @@ from govasset_api.models import Asset, InspectionRecord, MaintenanceRecord
 from govasset_api.schemas import (
     AssetCreate,
     AssetRead,
+    AssetUpdate,
     InspectionCreate,
     InspectionRead,
     MaintenanceCreate,
@@ -73,6 +74,46 @@ def create_router(
         asset = find_asset(session, asset_id, scope)
         if asset is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found.")
+        return asset
+
+    @router.patch("/assets/{asset_id}", response_model=AssetRead, tags=["assets"])
+    def update_asset(
+        asset_id: int,
+        payload: AssetUpdate,
+        scope: TenantScope = Depends(current_scope),
+        session: Session = Depends(get_session),
+    ):
+        ensure_permission(scope, "asset:write")
+        asset = find_asset(session, asset_id, scope)
+        if asset is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found.")
+
+        changes = payload.model_dump(exclude_unset=True)
+        for field in ("asset_code", "asset_type", "condition", "active"):
+            if field in changes and changes[field] is None:
+                raise HTTPException(status_code=422, detail=f"{field} cannot be null.")
+        last_service_date = changes.get("last_service_date", asset.last_service_date)
+        next_service_due = changes.get("next_service_due", asset.next_service_due)
+        if (
+            last_service_date is not None
+            and next_service_due is not None
+            and next_service_due < last_service_date
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="next_service_due cannot be earlier than last_service_date.",
+            )
+        for field, value in changes.items():
+            setattr(asset, field, value.value if hasattr(value, "value") else value)
+        try:
+            session.commit()
+        except IntegrityError as exc:
+            session.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An asset with this asset_code already exists.",
+            ) from exc
+        session.refresh(asset)
         return asset
 
     @router.post(

@@ -45,6 +45,7 @@ The initial demonstration rules mark recorded `critical` condition as critical; 
 | `PATCH` | `/api/v1/admin/memberships/{user_id}/{institution_id}` | Update an institution membership role |
 | `DELETE` | `/api/v1/admin/memberships/{user_id}/{institution_id}` | Remove an institution membership |
 | `POST` | `/api/v1/assets` | Register an asset |
+| `PATCH` | `/api/v1/assets/{asset_id}` | Correct asset details or deactivate it while retaining history |
 | `GET` | `/api/v1/assets` | List assets; optionally filter with `?active=true` |
 | `GET` | `/api/v1/assets/{asset_id}` | Get asset details |
 | `POST` | `/api/v1/assets/{asset_id}/maintenance` | Record maintenance |

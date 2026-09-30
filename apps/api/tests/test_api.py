@@ -67,6 +67,48 @@ def test_create_asset_and_reject_duplicate_code(client):
     assert create_asset(client).status_code == 409
 
 
+def test_update_asset_validates_partial_changes_and_preserves_history(client):
+    asset = create_asset(
+        client,
+        asset_code="EDIT-001",
+        last_service_date="2026-01-01",
+        next_service_due="2026-06-01",
+    ).json()
+
+    updated = client.patch(
+        f"/api/v1/assets/{asset['id']}",
+        json={"asset_code": "EDIT-001A", "condition": "fair"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["asset_code"] == "EDIT-001A"
+    assert updated.json()["condition"] == "fair"
+    assert updated.json()["last_service_date"] == "2026-01-01"
+    assert updated.json()["next_service_due"] == "2026-06-01"
+
+    invalid_dates = client.patch(
+        f"/api/v1/assets/{asset['id']}",
+        json={"next_service_due": "2025-12-31"},
+    )
+    assert invalid_dates.status_code == 422
+
+    null_required = client.patch(
+        f"/api/v1/assets/{asset['id']}",
+        json={"asset_type": None},
+    )
+    assert null_required.status_code == 422
+
+    duplicate = create_asset(client, asset_code="EDIT-002").json()
+    conflict = client.patch(
+        f"/api/v1/assets/{asset['id']}",
+        json={"asset_code": duplicate["asset_code"]},
+    )
+    assert conflict.status_code == 409
+
+    deactivate = client.patch(f"/api/v1/assets/{asset['id']}", json={"active": False})
+    assert deactivate.status_code == 200
+    assert deactivate.json()["active"] is False
+
+
 def test_local_environment_file_loads_for_uvicorn_without_overriding_shell_values(
     monkeypatch, tmp_path
 ):
@@ -1108,6 +1150,10 @@ def test_tenant_data_isolation_for_assets_reports_exports_triage_and_events(
     ]
     assert client.get("/api/v1/assets", params={"institution_id": second["id"]}).status_code == 403
     assert client.get(f"/api/v1/assets/{asset_b['id']}").status_code == 404
+    assert client.patch(
+        f"/api/v1/assets/{asset_b['id']}",
+        json={"asset_code": "CROSS-TENANT"},
+    ).status_code == 404
     assert client.post(
         f"/api/v1/assets/{asset_b['id']}/maintenance",
         json={"event_date": "2026-09-30", "category": "repair"},
@@ -1200,6 +1246,10 @@ def test_membership_required_and_read_only_roles_cannot_mutate(client, monkeypat
     )
     assert denied_asset.status_code == 403
     assert "read-only" in denied_asset.json()["detail"]
+    assert client.patch(
+        f"/api/v1/assets/{asset['id']}",
+        json={"asset_code": "FORGED"},
+    ).status_code == 403
     denied_maintenance = client.post(
         f"/api/v1/assets/{asset['id']}/maintenance",
         json={"event_date": "2026-09-30", "category": "repair"},
