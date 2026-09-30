@@ -15,7 +15,9 @@ uvicorn govasset_api.main:app --reload --host 127.0.0.1 --port 8000
 
 From the API directory, Uvicorn automatically loads `apps/api/.env.local` during local startup; application environment variables already set in the shell take precedence. The loader is disabled for Render (`RENDER_SERVICE_ID`) and production (`APP_ENV=production`). Keep this file ignored by git. The API `.env` file is not loaded automatically. Set `SUPABASE_URL` to the same Supabase project used by `apps/web/.env.local`. Use a local SQLite database for isolated test records, or deliberately configure the Supabase PostgreSQL pooler if you intend to use shared development data. Keep `AUTH_REQUIRED=true` when testing real sign-in and approval claims; use `AUTH_REQUIRED=false` only for isolated local development where authentication is intentionally disabled. Never use development settings for a deployed service.
 
-To use a different local database, change `DATABASE_URL` in `.env.local`. Browser requests from the two localhost Next.js origins are allowed by default; configure `CORS_ORIGINS` as a comma-separated exact-origin allowlist for other local frontend origins.
+Alternatively, run `npm run dev` from `apps/web` to start the API and frontend together. That command checks the local API health endpoint before launching the frontend.
+
+To use a different local database, change `DATABASE_URL` in `.env.local`. Browser requests from localhost and `127.0.0.1` development origins are allowed on any port; hosted CORS only allows the configured production and Umutungo preview domains.
 
 Open `http://127.0.0.1:8000/docs` for interactive API documentation.
 

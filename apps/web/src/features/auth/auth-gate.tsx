@@ -17,7 +17,12 @@ export function AuthGate({
     supabaseIsConfigured() ? "loading" : "misconfigured",
   );
   const [session, setSession] = useState<Session | null>(null);
-  const [mode, setMode] = useState<AuthMode>("sign_in");
+  const [mode, setMode] = useState<AuthMode>(() =>
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("password_recovery") === "1"
+      ? "update_password"
+      : "sign_in",
+  );
   const [signInError, setSignInError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [busy, setBusy] = useState(false);
@@ -25,6 +30,9 @@ export function AuthGate({
   useEffect(() => {
     if (!supabaseIsConfigured()) return;
     const supabase = getSupabaseBrowserClient();
+    const query = new URLSearchParams(window.location.search);
+    const emailWasConfirmed =
+      query.get("email_confirmed") === "1";
     let active = true;
     const {
       data: { subscription },
@@ -51,6 +59,11 @@ export function AuthGate({
         }
         setSession(data.session);
         setStatus(data.session ? "signed_in" : "signed_out");
+        if (emailWasConfirmed && !data.session) {
+          setAuthMessage(
+            "Email confirmed. Sign in to continue; an administrator must approve API access.",
+          );
+        }
       },
     );
     return () => {
@@ -108,7 +121,7 @@ export function AuthGate({
         email,
         password,
         options: {
-          emailRedirectTo: `${window.location.origin}/`,
+          emailRedirectTo: new URL("/auth/callback", window.location.origin).toString(),
           data: {
             full_name: fullName,
             organization: organization || null,
@@ -142,7 +155,10 @@ export function AuthGate({
     setAuthMessage("");
     try {
       const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(email, {
-        redirectTo: window.location.origin,
+        redirectTo: new URL(
+          "/auth/callback?flow=recovery",
+          window.location.origin,
+        ).toString(),
       });
       if (error) throw error;
       setMode("check_email");

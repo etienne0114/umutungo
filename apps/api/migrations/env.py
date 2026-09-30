@@ -26,9 +26,11 @@ def run_migrations_offline() -> None:
 def run_migrations_online() -> None:
     connectable = make_engine(os.getenv("DATABASE_URL"))
     schema = "govasset" if connectable.dialect.name == "postgresql" else None
+    if schema is not None:
+        with connectable.begin() as schema_connection:
+            schema_connection.exec_driver_sql("CREATE SCHEMA IF NOT EXISTS govasset")
+
     with connectable.connect() as connection:
-        if schema is not None:
-            connection.exec_driver_sql("CREATE SCHEMA IF NOT EXISTS govasset")
         context.configure(
             connection=connection,
             target_metadata=target_metadata,

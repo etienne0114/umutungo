@@ -43,8 +43,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       cache: "no-store",
     });
   } catch {
+    const isLocalApi =
+      API_BASE_URL.startsWith("http://localhost") ||
+      API_BASE_URL.startsWith("http://127.0.0.1");
     throw new Error(
-      `Could not complete the API request at ${API_BASE_URL}. Check the API address, network connection, and that this frontend origin is allowed by the API's CORS_ORIGINS.`,
+      isLocalApi
+        ? `Could not reach the local API at ${API_BASE_URL}. Start both services with "npm run dev" from apps/web, then confirm ${API_BASE_URL}/health returns status ok.`
+        : `Could not complete the API request at ${API_BASE_URL}. Check the API address, network connection, and that this frontend origin is allowed by the API's CORS_ORIGINS.`,
     );
   }
 

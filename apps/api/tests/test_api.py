@@ -141,7 +141,7 @@ def test_csv_export_rejects_more_than_the_safe_row_limit(client, monkeypatch):
     assert "Narrow the dataset" in response.json()["detail"]
 
 
-def test_cors_allows_project_preview_origins_but_not_other_vercel_projects(
+def test_cors_allows_local_dev_ports_and_project_previews_but_not_other_projects(
     monkeypatch,
 ):
     monkeypatch.setenv("AUTH_REQUIRED", "false")
@@ -153,7 +153,15 @@ def test_cors_allows_project_preview_origins_but_not_other_vercel_projects(
     )
     try:
         with TestClient(create_app(engine)) as test_client:
-            allowed = test_client.options(
+            local_dev_port = test_client.options(
+                "/api/v1/assets",
+                headers={
+                    "Origin": "http://localhost:3001",
+                    "Access-Control-Request-Method": "GET",
+                    "Access-Control-Request-Headers": "authorization",
+                },
+            )
+            preview = test_client.options(
                 "/api/v1/assets",
                 headers={
                     "Origin": "https://umutungo-preview-123-etienne0114s-projects.vercel.app",
@@ -172,9 +180,11 @@ def test_cors_allows_project_preview_origins_but_not_other_vercel_projects(
     finally:
         engine.dispose()
 
-    assert allowed.status_code == 200
+    assert local_dev_port.status_code == 200
+    assert local_dev_port.headers["access-control-allow-origin"] == "http://localhost:3001"
+    assert preview.status_code == 200
     assert (
-        allowed.headers["access-control-allow-origin"]
+        preview.headers["access-control-allow-origin"]
         == "https://umutungo-preview-123-etienne0114s-projects.vercel.app"
     )
     assert "access-control-allow-origin" not in rejected.headers
