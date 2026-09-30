@@ -135,7 +135,7 @@ function BrandMark() {
   return (
     <div className="auth-brand">
       <span className="brand-mark"><span>G</span></span>
-      <span className="brand-name">GovAsset <span>Insight</span></span>
+      <span className="brand-name">Umutungo</span>
     </div>
   );
 }

@@ -58,7 +58,7 @@ def create_app(engine: Engine | None = None) -> FastAPI:
         yield
 
     app = FastAPI(
-        title="GovAsset Insight API",
+        title="Umutungo API",
         version="0.1.0",
         description=(
             "Local pilot API for asset history and transparent maintenance triage. "

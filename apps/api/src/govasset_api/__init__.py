@@ -1,1 +1,1 @@
-"""GovAsset Insight pilot API."""
+"""Umutungo pilot API."""

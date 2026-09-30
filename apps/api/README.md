@@ -75,9 +75,9 @@ The repository-root `render.yaml` defines the API as a Docker web service in Fra
 | `DATABASE_URL` | Supabase PostgreSQL connection URL |
 | `SUPABASE_URL` | Supabase project HTTPS URL (the same project as the browser Auth settings) |
 | `AUTH_REQUIRED` | `true` |
-| `CORS_ORIGINS` | Exact production frontend origin: `https://titans-blue-seven.vercel.app` |
+| `CORS_ORIGINS` | Exact frontend origins: `https://titans-blue-seven.vercel.app` and `https://umutungo.vercel.app` |
 
-`DATABASE_URL` and `SUPABASE_URL` use `sync: false` so Render requests those values in its setup flow instead of storing them in this repository. Do not put the PostgreSQL URL in `SUPABASE_URL`: they serve different purposes. The current local `apps/api/.env` has the database URL under `SUPABASE_URL`; map that value to Render's `DATABASE_URL` and use `NEXT_PUBLIC_SUPABASE_URL` for Render's `SUPABASE_URL`. Do not print, commit, or send database credentials in chat. The container applies the Alembic migration on startup, creating application tables in the isolated `govasset` schema.
+`DATABASE_URL` and `SUPABASE_URL` use `sync: false` so Render requests those values in its setup flow instead of storing them in this repository. Do not put the PostgreSQL URL in `SUPABASE_URL`: `DATABASE_URL` must be the PostgreSQL connection URL, while `SUPABASE_URL` must be the Supabase project HTTPS URL. The container applies the Alembic migration on startup, creating application tables in the isolated `govasset` schema. Set production secrets directly in Render; never commit them or send them in chat.
 
 ## Safety and maturity boundary
 

@@ -1,7 +1,7 @@
 schema_version: 1
 project:
-  name: "Government Asset Maintenance Intelligence"
-  working_title: "GovAsset Insight"
+  name: "Umutungo"
+  working_title: "Umutungo"
   status: "prototype"
   description: >-
     Decision support for prioritizing public-sector asset inspections and

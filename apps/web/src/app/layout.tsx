@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "GovAsset Insight | Fleet operations",
+  title: "Umutungo | Fleet operations",
   description:
     "A decision-support workspace for government asset inspections and maintenance planning.",
 };

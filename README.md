@@ -1,7 +1,6 @@
-# Government Asset Maintenance Intelligence
+# Umutungo
 
-**Working title:** GovAsset Insight  
-**Status:** Frontend deployed to Vercel; Render API deployment is pending repository sync and secret setup
+**Status:** Frontend is available on Vercel; Render API is not healthy yet
 **Purpose:** Help public-sector maintenance teams prioritize inspections and planned work using existing asset and maintenance data. The product is decision support; authorized people retain operational authority.
 
 ## Start here
@@ -24,7 +23,7 @@ The platform must complement—not replace or duplicate—official asset, fleet,
 
 ## Current maturity
 
-This repository contains the project definition, a local API prototype, and a Next.js dashboard intended to connect to the API. The dashboard is deployed to Vercel as `titans` and supports invitation-only Supabase sign-in; hosted API requests verify Supabase access tokens and require an administrator-approved account. PostgreSQL migrations and a Render Docker-service Blueprint are in place. The API has not been deployed, and no remote database migration has been applied. The product does not run AI models and is not approved for operational data or network deployment.
+This repository contains the project definition, a local API prototype, and a Next.js dashboard. The frontend is deployed to Vercel at `https://titans-blue-seven.vercel.app` and supports invitation-only Supabase sign-in; hosted API requests verify Supabase access tokens and require an administrator-approved account. PostgreSQL migrations and a Render Docker-service Blueprint are in place, but the Render API is not currently healthy. The product does not run AI models and is not approved for operational data or network deployment.
 
 ## Source-of-truth policy
 

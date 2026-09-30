@@ -259,12 +259,12 @@ export function Dashboard({
   return (
     <div className="app-frame">
       <aside className="sidebar">
-        <Link className="brand" href="/" aria-label="GovAsset Insight home">
+        <Link className="brand" href="/" aria-label="Umutungo home">
           <span className="brand-mark">
             <Icon name="activity" />
           </span>
           <span className="brand-name">
-            GovAsset <span>Insight</span>
+            Umutungo
           </span>
         </Link>
         <div className="workspace-label">WORKSPACE</div>

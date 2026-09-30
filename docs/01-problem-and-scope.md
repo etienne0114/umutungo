@@ -4,7 +4,7 @@
 
 Government fleet and asset teams need to decide which assets to inspect or maintain first. Fixed schedules, operator reports, inspections, asset registers, and maintenance histories provide useful information, but fragmented records and limited condition-based prioritization can make it difficult to identify emerging maintenance needs early. The result may be avoidable downtime, reactive work, or maintenance effort spent on lower-priority assets. The scale and causes of these effects have not yet been quantified for a participating institution.
 
-**For fleet/asset managers and maintenance officers, GovAsset Insight will combine authorized asset, inspection, usage, and work-history information into a traceable prioritized work queue. It will show the evidence and uncertainty behind each flag, let staff record a decision and outcome, and measure whether it improves maintenance planning against an agreed baseline. It will not diagnose a mechanical fault or autonomously authorize a repair.**
+**For fleet/asset managers and maintenance officers, Umutungo will combine authorized asset, inspection, usage, and work-history information into a traceable prioritized work queue. It will show the evidence and uncertainty behind each flag, let staff record a decision and outcome, and measure whether it improves maintenance planning against an agreed baseline. It will not diagnose a mechanical fault or autonomously authorize a repair.**
 
 This wording is a discovery hypothesis, not a claim that all government institutions have the same workflow or data.
 

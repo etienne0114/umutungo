@@ -22,7 +22,7 @@ Approved source systems / files
              audit/evaluation
 ```
 
-The system of record for asset identity, finance, inventory, and work orders must be decided with each source owner. GovAsset Insight stores only the operational data necessary for its approved functions and references external identifiers where feasible.
+The system of record for asset identity, finance, inventory, and work orders must be decided with each source owner. Umutungo stores only the operational data necessary for its approved functions and references external identifiers where feasible.
 
 ## Proposed repository layout
 
