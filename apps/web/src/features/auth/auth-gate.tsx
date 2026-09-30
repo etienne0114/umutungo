@@ -11,7 +11,8 @@ type AuthMode =
   | "reset_password"
   | "update_password"
   | "check_email"
-  | "email_rate_limited";
+  | "email_rate_limited"
+  | "email_delivery_failed";
 const approvalRequired = process.env.NEXT_PUBLIC_AUTH_REQUIRED !== "false";
 
 function getSignupRateLimit(error: unknown): "email" | "requests" | null {
@@ -34,6 +35,15 @@ function getSignupRateLimit(error: unknown): "email" | "requests" | null {
     : null;
 }
 
+function isSignupEmailDeliveryError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return (
+    message.includes("error sending confirmation email") ||
+    message.includes("failed to send confirmation email")
+  );
+}
+
 export function AuthGate({
   children,
 }: {
@@ -51,6 +61,7 @@ export function AuthGate({
   );
   const [signInError, setSignInError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const [registrationEmail, setRegistrationEmail] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -123,6 +134,7 @@ export function AuthGate({
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
     const email = String(formData.get("email") ?? "").trim();
+    setRegistrationEmail(email);
     const fullName = String(formData.get("full_name") ?? "").trim();
     const organization = String(formData.get("organization") ?? "").trim();
     const password = String(formData.get("password") ?? "");
@@ -168,6 +180,12 @@ export function AuthGate({
       const rateLimit = getSignupRateLimit(error);
       if (rateLimit === "email") {
         setMode("email_rate_limited");
+        setAuthMessage("");
+        setSignInError("");
+        return;
+      }
+      if (isSignupEmailDeliveryError(error)) {
+        setMode("email_delivery_failed");
         setAuthMessage("");
         setSignInError("");
         return;
@@ -347,6 +365,50 @@ export function AuthGate({
     );
   }
 
+  if (mode === "email_delivery_failed") {
+    return (
+      <main className="auth-screen">
+        <section className="auth-card">
+          <BrandMark />
+          <div className="eyebrow">EMAIL DELIVERY ISSUE</div>
+          <h1>We couldn&apos;t send your confirmation</h1>
+          <p role="alert">
+            Your registration request reached Umutungo, but the email service did not accept
+            the confirmation message. Your account may already be pending; avoid repeated
+            submissions.
+          </p>
+          <p className="auth-footnote">
+            The project administrator should verify the Supabase SMTP host, credentials, and
+            sender address against the verified Resend domain. Once corrected, return here and
+            submit registration again.
+          </p>
+          <button
+            className="button button-primary auth-submit"
+            onClick={() => {
+              setMode("register");
+              setSignInError("");
+              setAuthMessage("");
+            }}
+            type="button"
+          >
+            Back to registration
+          </button>
+          <button
+            className="auth-link"
+            onClick={() => {
+              setMode("sign_in");
+              setSignInError("");
+              setAuthMessage("");
+            }}
+            type="button"
+          >
+            Back to sign in
+          </button>
+        </section>
+      </main>
+    );
+  }
+
   if (
     approvalRequired &&
     status === "signed_in" &&
@@ -429,7 +491,13 @@ export function AuthGate({
           >
             <label className="field">
               <span>Email address</span>
-              <input autoComplete="email" name="email" required type="email" />
+              <input
+                autoComplete="email"
+                defaultValue={mode === "register" ? registrationEmail : ""}
+                name="email"
+                required
+                type="email"
+              />
             </label>
             {mode === "register" && (
               <>
