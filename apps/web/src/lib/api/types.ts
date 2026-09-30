@@ -1,6 +1,7 @@
 import type { Institution } from "./institutions";
 
 export type AssetCondition = "good" | "fair" | "poor" | "critical" | "unknown";
+export type AssetCriticality = "standard" | "important" | "mission_critical";
 export type RiskLevel = "critical" | "high" | "medium" | "low" | "insufficient_data";
 export type Disposition = "accepted" | "deferred" | "rejected";
 export type Outcome =
@@ -11,10 +12,14 @@ export type Outcome =
 
 export interface Asset {
   id: number;
+  institution_id: number | null;
   asset_code: string;
   asset_type: string;
   make: string | null;
   model: string | null;
+  registration_number: string | null;
+  manufacture_year: number | null;
+  criticality: AssetCriticality;
   acquisition_date: string | null;
   last_inspected_on: string | null;
   last_service_date: string | null;
@@ -32,6 +37,11 @@ export interface MaintenanceRecord {
   description: string | null;
   planned: boolean;
   downtime_hours: number | null;
+  odometer_km: number | null;
+  cost_amount: number | null;
+  currency: string;
+  provider_name: string | null;
+  work_order_reference: string | null;
   created_at: string;
 }
 
@@ -142,6 +152,9 @@ export interface AssetCreate {
   asset_type: string;
   make?: string | null;
   model?: string | null;
+  registration_number?: string | null;
+  manufacture_year?: number | null;
+  criticality?: AssetCriticality;
   acquisition_date?: string | null;
   last_service_date?: string | null;
   next_service_due?: string | null;
@@ -157,10 +170,27 @@ export interface MaintenanceCreate {
   description?: string | null;
   planned: boolean;
   downtime_hours?: number | null;
+  odometer_km?: number | null;
+  cost_amount?: number | null;
+  currency?: string;
+  provider_name?: string | null;
+  work_order_reference?: string | null;
 }
 
 export interface InspectionCreate {
   inspected_on: string;
   condition: Exclude<AssetCondition, "unknown">;
   observations?: string | null;
+}
+
+// Triage run insights types
+export interface TriageRunInsights {
+  run_id: number;
+  evaluated_on: string;
+  total_recommendations: number;
+  summary: {
+    risk_distribution: Record<string, number>;
+    condition_distribution: Record<string, number>;
+  };
+  assets_by_condition: Record<string, string[]>;
 }

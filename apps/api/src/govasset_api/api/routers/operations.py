@@ -9,7 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from govasset_api.authorization import TenantScope, scoped_assets
-from govasset_api.models import Asset, InspectionRecord, Institution, MaintenanceRecord
+from govasset_api.models import (
+    Asset,
+    AssetUsageReading,
+    InspectionRecord,
+    Institution,
+    MaintenanceRecord,
+)
 from govasset_api.reporting import (
     bounded_export_rows,
     build_institution_tree_report,
@@ -106,10 +112,14 @@ def create_router(
             session,
             scoped_assets(
                 select(
+                    Asset.institution_id,
                     Asset.asset_code,
                     Asset.asset_type,
                     Asset.make,
                     Asset.model,
+                    Asset.registration_number,
+                    Asset.manufacture_year,
+                    Asset.criticality,
                     Asset.acquisition_date,
                     Asset.condition,
                     Asset.active,
@@ -124,10 +134,14 @@ def create_router(
         return _csv_response(
             "umutungo-assets.csv",
             [
+                "institution_id",
                 "asset_code",
                 "asset_type",
                 "make",
                 "model",
+                "registration_number",
+                "manufacture_year",
+                "criticality",
                 "acquisition_date",
                 "condition",
                 "active",
@@ -145,12 +159,19 @@ def create_router(
         session: Session = Depends(get_session),
     ):
         statement = select(
+            Asset.institution_id,
             Asset.asset_code,
+            Asset.registration_number,
             MaintenanceRecord.event_date,
             MaintenanceRecord.category,
             MaintenanceRecord.description,
             MaintenanceRecord.planned,
             MaintenanceRecord.downtime_hours,
+            MaintenanceRecord.odometer_km,
+            MaintenanceRecord.cost_amount,
+            MaintenanceRecord.currency,
+            MaintenanceRecord.provider_name,
+            MaintenanceRecord.work_order_reference,
             MaintenanceRecord.created_at,
         ).join(Asset, MaintenanceRecord.asset_id == Asset.id)
         rows = _bounded_rows(
@@ -163,12 +184,19 @@ def create_router(
         return _csv_response(
             "umutungo-maintenance.csv",
             [
+                "institution_id",
                 "asset_code",
+                "registration_number",
                 "event_date",
                 "category",
                 "description",
                 "planned",
                 "downtime_hours",
+                "odometer_km",
+                "cost_amount",
+                "currency",
+                "provider_name",
+                "work_order_reference",
                 "created_at",
             ],
             rows,
@@ -196,6 +224,43 @@ def create_router(
         return _csv_response(
             "umutungo-inspections.csv",
             ["asset_code", "inspected_on", "condition", "observations", "created_at"],
+            rows,
+        )
+
+    @router.get("/exports/usage-readings.csv", tags=["exports"])
+    def export_usage_readings(
+        scope: TenantScope = Depends(current_scope),
+        session: Session = Depends(get_session),
+    ):
+        statement = select(
+            Asset.institution_id,
+            Asset.asset_code,
+            Asset.registration_number,
+            AssetUsageReading.recorded_on,
+            AssetUsageReading.odometer_km,
+            AssetUsageReading.source,
+            AssetUsageReading.notes,
+            AssetUsageReading.created_at,
+        ).join(Asset, AssetUsageReading.asset_id == Asset.id)
+        rows = _bounded_rows(
+            session,
+            scoped_assets(statement, scope).order_by(
+                AssetUsageReading.recorded_on,
+                AssetUsageReading.id,
+            ),
+        )
+        return _csv_response(
+            "umutungo-usage-readings.csv",
+            [
+                "institution_id",
+                "asset_code",
+                "registration_number",
+                "recorded_on",
+                "odometer_km",
+                "source",
+                "notes",
+                "created_at",
+            ],
             rows,
         )
 

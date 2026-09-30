@@ -41,13 +41,29 @@ def initialize_schema(engine: Engine) -> None:
     asset_columns = {
         column["name"] for column in inspect(engine).get_columns("assets", schema=schema)
     }
-    if "last_inspected_on" not in asset_columns:
+    column_definitions = {"last_inspected_on": "last_inspected_on DATE"}
+    if engine.dialect.name == "sqlite":
+        column_definitions.update(
+            {
+                "registration_number": "registration_number VARCHAR(40)",
+                "manufacture_year": "manufacture_year INTEGER",
+                "criticality": (
+                    "criticality VARCHAR(20) NOT NULL DEFAULT 'standard'"
+                ),
+            }
+        )
+    missing_definitions = [
+        definition
+        for name, definition in column_definitions.items()
+        if name not in asset_columns
+    ]
+    if missing_definitions:
+        table_name = "govasset.assets" if schema is not None else "assets"
         with engine.begin() as connection:
-            connection.execute(
-                text("ALTER TABLE govasset.assets ADD COLUMN last_inspected_on DATE")
-                if schema is not None
-                else text("ALTER TABLE assets ADD COLUMN last_inspected_on DATE")
-            )
+            for definition in missing_definitions:
+                connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {definition}"))
+
+
     from govasset_api.services.institution_catalog import sync_rwanda_government_catalog
 
     with Session(engine) as session:

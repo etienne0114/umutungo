@@ -1,21 +1,22 @@
 import type {
+  AdminUser,
   Asset,
   AssetCreate,
   AssetUpdate,
-  AdminUser,
   Disposition,
   InspectionCreate,
   InspectionRecord,
   InstitutionTreeReport,
   MaintenanceCreate,
   MaintenanceRecord,
-  Outcome,
   OperationsReport,
+  Outcome,
   Recommendation,
   RecommendationEvent,
   RiskLevel,
   TriageItem,
   TriageRun,
+  TriageRunInsights,
 } from "./types";
 import type {
   CatalogSyncResult,
@@ -129,7 +130,9 @@ async function checkApiHealth(): Promise<boolean> {
   return true;
 }
 
-async function downloadCsv(dataset: "assets" | "maintenance" | "inspections") {
+async function downloadCsv(
+  dataset: "assets" | "maintenance" | "inspections",
+) {
   let response: Response;
   try {
     response = await fetch(`${API_BASE_URL}${scopedPath(`/api/v1/exports/${dataset}.csv`)}`, {
@@ -279,4 +282,6 @@ export const api = {
         reason: reason || undefined,
       }),
     }),
+  getTriageRunInsights: (runId: number) =>
+    request<TriageRunInsights>(`/api/v1/triage-runs/${runId}/insights`),
 };

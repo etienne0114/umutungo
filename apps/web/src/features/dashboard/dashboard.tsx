@@ -16,6 +16,7 @@ import { AccessManagement } from "@/features/admin/access-management";
 import { InstitutionManagement } from "@/features/admin/institution-management";
 import { ProfilePanel, avatarInitials } from "@/features/profile/profile-panel";
 import { OperationsReportView } from "@/features/reports/operations-report";
+import { TriageInsightsModal } from "./triage-insights-modal";
 import { api, setActiveInstitutionId } from "@/lib/api/client";
 import type { Institution } from "@/lib/api/institutions";
 import type {
@@ -32,7 +33,14 @@ import type {
   TriageItem,
 } from "@/lib/api/types";
 
-type View = "overview" | "assets" | "recommendations" | "reports" | "institutions" | "users";
+type View =
+  | "overview"
+  | "assets"
+  | "recommendations"
+  | "analytics"
+  | "reports"
+  | "institutions"
+  | "users";
 
 const navigation: { id: Exclude<View, "users" | "institutions">; label: string; icon: IconName }[] = [
   { id: "overview", label: "Overview", icon: "overview" },
@@ -91,6 +99,7 @@ export function Dashboard({
   );
   const [showProfile, setShowProfile] = useState(false);
   const [showAssetForm, setShowAssetForm] = useState(false);
+  const [showTriageInsights, setShowTriageInsights] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const reportError = useCallback((message: string) => setError(message), []);
   const email = user.email ?? "Signed-in user";
@@ -101,9 +110,9 @@ export function Dashboard({
   const isApproved = user.app_metadata.govasset_access === "approved";
   const isAdmin = user.app_metadata.govasset_role === "admin";
   const localDevelopment = process.env.NEXT_PUBLIC_AUTH_REQUIRED === "false";
-  const activeRole =
-    institutions.find((institution) => institution.id === activeInstitutionId)?.membership_role ??
-    null;
+  const activeInstitution =
+    institutions.find((institution) => institution.id === activeInstitutionId) ?? null;
+  const activeRole = activeInstitution?.membership_role ?? null;
   const institutionSelectionRequired =
     !isAdmin && institutions.length > 1 && activeInstitutionId === null;
   const canRegisterAssets =
@@ -374,6 +383,9 @@ export function Dashboard({
       asset_type: String(form.get("asset_type") ?? "").trim(),
       make: String(form.get("make") ?? "").trim() || null,
       model: String(form.get("model") ?? "").trim() || null,
+      registration_number: String(form.get("registration_number") ?? "").trim() || null,
+      manufacture_year: Number(form.get("manufacture_year")) || null,
+      criticality: String(form.get("criticality") ?? "standard") as AssetCreate["criticality"],
       acquisition_date: String(form.get("acquisition_date") ?? "") || null,
       last_service_date: String(form.get("last_service_date") ?? "") || null,
       next_service_due: String(form.get("next_service_due") ?? "") || null,
@@ -465,6 +477,8 @@ export function Dashboard({
                   ? "Asset register"
                   : view === "recommendations"
                     ? "Recommendations"
+                    : view === "analytics"
+                      ? "Maintenance analytics"
                       : view === "reports"
                         ? "Data quality"
                         : view === "institutions"
@@ -617,6 +631,7 @@ export function Dashboard({
               onLoadLatest={() => void loadLatestRecommendations()}
               onOpen={(recommendation) => void openRecommendation(recommendation)}
               onSelectRun={(runId) => void selectRun(runId)}
+              onViewInsights={(runId) => setShowTriageInsights(runId)}
               recommendations={recommendations}
               runs={runs}
             />
@@ -655,6 +670,12 @@ export function Dashboard({
         />
       )}
       {showProfile && <ProfilePanel user={user} onClose={() => setShowProfile(false)} />}
+      {showTriageInsights && (
+        <TriageInsightsModal
+          runId={showTriageInsights}
+          onClose={() => setShowTriageInsights(null)}
+        />
+      )}
       {showAssetForm && (
         <Modal title="Add an asset" onClose={() => setShowAssetForm(false)}>
           <form className="form-stack" onSubmit={(event) => void createAsset(event)}>
@@ -663,6 +684,24 @@ export function Dashboard({
               <Field label="Asset type" name="asset_type" required placeholder="e.g. Vehicle" />
               <Field label="Make" name="make" placeholder="e.g. Toyota" />
               <Field label="Model" name="model" placeholder="e.g. Land Cruiser" />
+              <Field
+                label="Registration number"
+                maxLength={40}
+                name="registration_number"
+                placeholder="e.g. GR 001 A"
+              />
+              <Field
+                label="Manufacture year"
+                max={new Date().getFullYear().toString()}
+                min="1900"
+                name="manufacture_year"
+                type="number"
+              />
+              <SelectField
+                label="Operational criticality"
+                name="criticality"
+                options={["standard", "important", "mission_critical"]}
+              />
               <Field label="Acquisition date" name="acquisition_date" type="date" />
               <SelectField
                 label="Recorded condition"
@@ -672,8 +711,10 @@ export function Dashboard({
               <Field label="Last service" name="last_service_date" type="date" />
               <Field label="Next service due" name="next_service_due" type="date" />
             </div>
-            <p className="form-hint">
-              Use the official asset identifier assigned by the source institution.
+            <p className="form-hint institution-form-hint">
+              This asset will be owned by{" "}
+              <strong>{activeInstitution?.name ?? "the selected institution"}</strong>.
+              Use the official asset identifier and registration shown in its source records.
             </p>
             <div className="modal-actions">
               <button className="button button-secondary" onClick={() => setShowAssetForm(false)} type="button">
@@ -1046,6 +1087,7 @@ function RecommendationList({
   onLoadLatest,
   onOpen,
   onSelectRun,
+  onViewInsights,
   recommendations,
   runs,
 }: {
@@ -1056,6 +1098,7 @@ function RecommendationList({
   onLoadLatest: () => void;
   onOpen: (recommendation: Recommendation) => void;
   onSelectRun: (runId: number) => void;
+  onViewInsights: (runId: number) => void;
   recommendations: Recommendation[];
   runs: Awaited<ReturnType<typeof api.listTriageRuns>>;
 }) {
@@ -1078,6 +1121,16 @@ function RecommendationList({
           <button className="button button-secondary" disabled={busy} onClick={onLoadLatest} type="button">
             <Icon name="clock" /> Load saved runs
           </button>
+          {activeRun && (
+            <button
+              className="button button-secondary"
+              disabled={busy}
+              onClick={() => onViewInsights(activeRun)}
+              type="button"
+            >
+              <Icon name="activity" /> View Insights
+            </button>
+          )}
           {canRunTriage && (
             <button className="button button-primary" disabled={busy} onClick={onGenerate} type="button">
               <Icon name="activity" /> {busy ? "Generating…" : "Save triage run"}
@@ -1175,7 +1228,9 @@ function AssetDrawer({
   onError: (message: string) => void;
   onSaved: (message: string) => Promise<void>;
 }) {
-  const [tab, setTab] = useState<"overview" | "inspections" | "maintenance">("overview");
+  const [tab, setTab] = useState<"overview" | "usage" | "inspections" | "maintenance">(
+    "overview",
+  );
   const [inspections, setInspections] = useState<InspectionRecord[]>([]);
   const [maintenance, setMaintenance] = useState<MaintenanceRecord[]>([]);
   const [loadedHistoryForAsset, setLoadedHistoryForAsset] = useState<Asset["id"] | null>(null);
@@ -1187,7 +1242,10 @@ function AssetDrawer({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.listInspections(asset.id), api.listMaintenance(asset.id)])
+    Promise.all([
+      api.listInspections(asset.id),
+      api.listMaintenance(asset.id),
+    ])
       .then(([nextInspections, nextMaintenance]) => {
         if (!cancelled) {
           setInspections(nextInspections);
@@ -1215,6 +1273,11 @@ function AssetDrawer({
         asset_type: String(form.get("asset_type") ?? "").trim(),
         make: String(form.get("make") ?? "").trim() || null,
         model: String(form.get("model") ?? "").trim() || null,
+        registration_number: String(form.get("registration_number") ?? "").trim() || null,
+        manufacture_year: Number(form.get("manufacture_year")) || null,
+        criticality: String(
+          form.get("criticality") ?? "standard",
+        ) as AssetCreate["criticality"],
         acquisition_date: String(form.get("acquisition_date") ?? "") || null,
         last_service_date: String(form.get("last_service_date") ?? "") || null,
         next_service_due: String(form.get("next_service_due") ?? "") || null,
@@ -1255,6 +1318,8 @@ function AssetDrawer({
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const downtime = String(form.get("downtime_hours") ?? "");
+    const odometer = String(form.get("odometer_km") ?? "");
+    const cost = String(form.get("cost_amount") ?? "");
     setBusy(true);
     try {
       await api.createMaintenance(asset.id, {
@@ -1263,11 +1328,18 @@ function AssetDrawer({
         description: String(form.get("description") ?? "").trim() || null,
         planned: form.get("planned") === "on",
         downtime_hours: downtime ? Number(downtime) : null,
+        odometer_km: odometer ? Number(odometer) : null,
+        cost_amount: cost ? Number(cost) : null,
+        currency: "RWF",
+        provider_name: String(form.get("provider_name") ?? "").trim() || null,
+        work_order_reference:
+          String(form.get("work_order_reference") ?? "").trim() || null,
       });
+      const nextMaintenance = await api.listMaintenance(asset.id);
       setShowMaintenanceForm(false);
       setTab("maintenance");
-      setMaintenance(await api.listMaintenance(asset.id));
-      await onSaved("Maintenance record added.");
+      setMaintenance(nextMaintenance);
+      await onSaved("Maintenance record saved.");
     } catch (error) {
       onError(getErrorMessage(error));
     } finally {
@@ -1276,17 +1348,34 @@ function AssetDrawer({
   }
 
   return (
-    <div className="drawer-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <aside aria-label={`Asset ${asset.asset_code}`} aria-modal="true" className="detail-drawer" role="dialog">
+    <div
+      className="drawer-backdrop"
+      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <aside
+        aria-label={`Asset ${asset.asset_code}`}
+        aria-modal="true"
+        className="detail-drawer"
+        role="dialog"
+      >
         <DrawerHeader
           eyebrow="ASSET PROFILE"
           title={asset.asset_code}
-          subtitle={[asset.make, asset.model, titleCase(asset.asset_type)].filter(Boolean).join(" · ")}
+          subtitle={[
+            asset.registration_number,
+            asset.make,
+            asset.model,
+            titleCase(asset.asset_type),
+          ]
+            .filter(Boolean)
+            .join(" · ")}
           onClose={onClose}
         />
         <div className="drawer-risk-row">
           <ConditionBadge condition={asset.condition} />
-          <span className="small-muted">Current recorded condition</span>
+          <span className="small-muted">
+            {titleCase(asset.criticality)} operational criticality
+          </span>
           {canEditAsset && (
             <button
               className="button button-secondary button-small"
@@ -1320,18 +1409,47 @@ function AssetDrawer({
                 <SectionTitle title="Asset information" />
                 <DetailRow label="Asset code" value={asset.asset_code} />
                 <DetailRow label="Asset type" value={titleCase(asset.asset_type)} />
-                <DetailRow label="Make and model" value={[asset.make, asset.model].filter(Boolean).join(" ") || "Not recorded"} />
+                <DetailRow
+                  label="Registration"
+                  value={asset.registration_number || "Not recorded"}
+                />
+                <DetailRow
+                  label="Make and model"
+                  value={
+                    [asset.make, asset.model].filter(Boolean).join(" ") || "Not recorded"
+                  }
+                />
+                <DetailRow
+                  label="Manufacture year"
+                  value={asset.manufacture_year?.toString() || "Not recorded"}
+                />
+                <DetailRow
+                  label="Operational criticality"
+                  value={titleCase(asset.criticality)}
+                />
                 <DetailRow label="Acquired" value={displayDate(asset.acquisition_date)} />
               </div>
               <div className="detail-section">
                 <SectionTitle title="Maintenance schedule" />
-                <DetailRow label="Last inspection" value={displayDate(asset.last_inspected_on)} />
-                <DetailRow label="Last service" value={displayDate(asset.last_service_date)} />
-                <DetailRow label="Next service due" value={displayDate(asset.next_service_due)} />
+                <DetailRow
+                  label="Last inspection"
+                  value={displayDate(asset.last_inspected_on)}
+                />
+                <DetailRow
+                  label="Last service"
+                  value={displayDate(asset.last_service_date)}
+                />
+                <DetailRow
+                  label="Next service due"
+                  value={displayDate(asset.next_service_due)}
+                />
               </div>
               <div className="action-card">
                 <strong>Staff review required</strong>
-                <p>Verify the record and apply institution maintenance procedures before scheduling work.</p>
+                <p>
+                  Verify the record and apply institution maintenance procedures before
+                  scheduling work.
+                </p>
               </div>
             </>
           )}
@@ -1365,7 +1483,23 @@ function AssetDrawer({
                   date={displayDate(record.event_date)}
                   key={record.id}
                   label={titleCase(record.category)}
-                  detail={`${record.planned ? "Planned" : "Unplanned"}${record.downtime_hours !== null ? ` · ${record.downtime_hours} hours downtime` : ""}${record.description ? ` · ${record.description}` : ""}`}
+                  detail={[
+                    record.planned ? "Planned" : "Unplanned",
+                    record.downtime_hours !== null
+                      ? `${record.downtime_hours} hours downtime`
+                      : null,
+                    record.odometer_km !== null
+                      ? `${record.odometer_km.toLocaleString()} km`
+                      : null,
+                    record.cost_amount !== null
+                      ? `${record.currency} ${record.cost_amount.toLocaleString()}`
+                      : null,
+                    record.provider_name,
+                    record.work_order_reference,
+                    record.description,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
                   tone={record.planned ? "good" : "fair"}
                 />
               ))}
@@ -1373,8 +1507,15 @@ function AssetDrawer({
           )}
         </div>
         <div className="drawer-footer">
-          <button className="button button-secondary full-width" onClick={onClose} type="button">Close profile</button>
+          <button
+            className="button button-secondary full-width"
+            onClick={onClose}
+            type="button"
+          >
+            Close profile
+          </button>
         </div>
+
         {showEditForm && (
           <Modal title={`Edit ${asset.asset_code}`} onClose={() => setShowEditForm(false)}>
             <form className="form-stack" onSubmit={(event) => void submitAssetUpdate(event)}>
@@ -1393,8 +1534,38 @@ function AssetDrawer({
                   name="asset_type"
                   required
                 />
-                <Field defaultValue={asset.make ?? ""} label="Make" maxLength={80} name="make" />
-                <Field defaultValue={asset.model ?? ""} label="Model" maxLength={80} name="model" />
+                <Field
+                  defaultValue={asset.make ?? ""}
+                  label="Make"
+                  maxLength={80}
+                  name="make"
+                />
+                <Field
+                  defaultValue={asset.model ?? ""}
+                  label="Model"
+                  maxLength={80}
+                  name="model"
+                />
+                <Field
+                  defaultValue={asset.registration_number ?? ""}
+                  label="Registration number"
+                  maxLength={40}
+                  name="registration_number"
+                />
+                <Field
+                  defaultValue={asset.manufacture_year?.toString() ?? ""}
+                  label="Manufacture year"
+                  max={new Date().getFullYear().toString()}
+                  min="1900"
+                  name="manufacture_year"
+                  type="number"
+                />
+                <SelectField
+                  defaultValue={asset.criticality}
+                  label="Operational criticality"
+                  name="criticality"
+                  options={["standard", "important", "mission_critical"]}
+                />
                 <Field
                   defaultValue={asset.acquisition_date ?? ""}
                   label="Acquisition date"
@@ -1425,7 +1596,8 @@ function AssetDrawer({
                 Asset is active
               </label>
               <p className="form-hint">
-                Deactivating an asset retains its history and removes it from active triage queues.
+                Deactivating an asset retains its complete history and removes it from active
+                triage queues.
               </p>
               <div className="modal-actions">
                 <button
@@ -1442,30 +1614,115 @@ function AssetDrawer({
             </form>
           </Modal>
         )}
+
         {showInspectionForm && (
           <Modal title="Record inspection" onClose={() => setShowInspectionForm(false)}>
             <form className="form-stack" onSubmit={(event) => void submitInspection(event)}>
-              <Field label="Inspection date" name="inspected_on" required type="date" max={new Date().toISOString().slice(0, 10)} />
-              <SelectField label="Observed condition" name="condition" options={["good", "fair", "poor", "critical"]} />
-              <TextAreaField label="Observations" name="observations" placeholder="Record observed issues or inspection notes" />
+              <Field
+                label="Inspection date"
+                max={new Date().toISOString().slice(0, 10)}
+                name="inspected_on"
+                required
+                type="date"
+              />
+              <SelectField
+                label="Observed condition"
+                name="condition"
+                options={["good", "fair", "poor", "critical"]}
+              />
+              <TextAreaField
+                label="Observations"
+                name="observations"
+                placeholder="Record observed issues or inspection notes"
+              />
               <div className="modal-actions">
-                <button className="button button-secondary" onClick={() => setShowInspectionForm(false)} type="button">Cancel</button>
-                <button className="button button-primary" disabled={busy} type="submit">{busy ? "Saving…" : "Save inspection"}</button>
+                <button
+                  className="button button-secondary"
+                  onClick={() => setShowInspectionForm(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button className="button button-primary" disabled={busy} type="submit">
+                  {busy ? "Saving…" : "Save inspection"}
+                </button>
               </div>
             </form>
           </Modal>
         )}
+
         {showMaintenanceForm && (
           <Modal title="Record maintenance" onClose={() => setShowMaintenanceForm(false)}>
             <form className="form-stack" onSubmit={(event) => void submitMaintenance(event)}>
-              <Field label="Event date" name="event_date" required type="date" max={new Date().toISOString().slice(0, 10)} />
-              <SelectField label="Work category" name="category" options={["inspection", "scheduled_service", "repair", "parts_replacement", "other"]} />
-              <Field label="Downtime (hours)" min="0" name="downtime_hours" step="0.25" type="number" />
-              <label className="checkbox-field"><input name="planned" type="checkbox" /> This work was planned</label>
-              <TextAreaField label="Work notes" name="description" placeholder="Describe work completed or findings" />
+              <div className="form-grid">
+                <Field
+                  label="Event date"
+                  max={new Date().toISOString().slice(0, 10)}
+                  name="event_date"
+                  required
+                  type="date"
+                />
+                <SelectField
+                  label="Work category"
+                  name="category"
+                  options={[
+                    "inspection",
+                    "scheduled_service",
+                    "oil_and_filter",
+                    "brake_system",
+                    "tyres",
+                    "repair",
+                    "parts_replacement",
+                    "other",
+                  ]}
+                />
+                <Field
+                  label="Odometer at service (km)"
+                  min="0"
+                  name="odometer_km"
+                  step="0.1"
+                  type="number"
+                />
+                <Field
+                  label="Downtime (hours)"
+                  min="0"
+                  name="downtime_hours"
+                  step="0.25"
+                  type="number"
+                />
+                <Field
+                  label="Cost (RWF)"
+                  min="0"
+                  name="cost_amount"
+                  step="1"
+                  type="number"
+                />
+                <Field label="Service provider" maxLength={200} name="provider_name" />
+                <Field
+                  label="Work order reference"
+                  maxLength={100}
+                  name="work_order_reference"
+                />
+              </div>
+              <label className="checkbox-field">
+                <input name="planned" type="checkbox" /> This work was planned
+              </label>
+              <TextAreaField
+                label="Work notes"
+                name="description"
+                placeholder="Describe work completed, parts replaced, or findings"
+              />
               <div className="modal-actions">
-                <button className="button button-secondary" onClick={() => setShowMaintenanceForm(false)} type="button">Cancel</button>
-                <button className="button button-primary" disabled={busy} type="submit">{busy ? "Saving…" : "Save maintenance"}</button>
+                <button
+                  className="button button-secondary"
+                  onClick={() => setShowMaintenanceForm(false)}
+                  type="button"
+                >
+                  Cancel
+                </button>
+                <button className="button button-primary" disabled={busy} type="submit">
+                  {busy ? "Saving…" : "Save maintenance"}
+                </button>
               </div>
             </form>
           </Modal>
@@ -1474,7 +1731,6 @@ function AssetDrawer({
     </div>
   );
 }
-
 function RecommendationDrawer({
   recommendation,
   canRecordOutcome,
@@ -1632,7 +1888,7 @@ function RecommendationDrawer({
   );
 }
 
-function DrawerHeader({
+export function DrawerHeader({
   eyebrow,
   onClose,
   subtitle,
@@ -1651,6 +1907,19 @@ function DrawerHeader({
         <p>{subtitle}</p>
       </div>
       <button aria-label="Close panel" className="icon-button" onClick={onClose} type="button"><Icon name="close" /></button>
+    </div>
+  );
+}
+
+export function SectionTitle({ title }: { title: string }) {
+  return <h3 className="section-title">{title}</h3>;
+}
+
+export function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="detail-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
     </div>
   );
 }
@@ -1707,14 +1976,6 @@ function HistoryItem({
       </div>
     </article>
   );
-}
-
-function SectionTitle({ title }: { title: string }) {
-  return <h3 className="section-title">{title}</h3>;
-}
-
-function DetailRow({ label, value }: { label: string; value: string }) {
-  return <div className="detail-row"><span>{label}</span><strong>{value}</strong></div>;
 }
 
 function RiskBadge({ level }: { level: RiskLevel }) {

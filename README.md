@@ -11,9 +11,10 @@
 4. [Data and predictive-analytics approach](docs/04-data-and-ml.md)
 5. [Roadmap and acceptance gates](docs/05-roadmap-and-acceptance.md)
 6. [Implemented codebase guide](docs/06-codebase-guide.md)
-7. [Project configuration](project.yaml)
-8. [Pilot API and hosted setup](apps/api/README.md)
-9. [Web application](apps/web/README.md)
+7. [Deployment guide](DEPLOYMENT.md)
+8. [Project configuration](project.yaml)
+9. [Pilot API and hosted setup](apps/api/README.md)
+10. [Web application](apps/web/README.md)
 
 ## Project principle
 

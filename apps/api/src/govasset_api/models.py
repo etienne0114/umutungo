@@ -7,10 +7,12 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
+    Integer,
     JSON,
+    Numeric,
     String,
     Text,
-    Index,
     UniqueConstraint,
     text,
 )
@@ -23,6 +25,11 @@ class Asset(Base):
     __tablename__ = "assets"
     __table_args__ = (
         UniqueConstraint("institution_id", "asset_code", name="uq_assets_institution_code"),
+        UniqueConstraint(
+            "institution_id",
+            "registration_number",
+            name="uq_assets_institution_registration_number",
+        ),
         Index(
             "uq_assets_unassigned_code",
             "asset_code",
@@ -31,6 +38,14 @@ class Asset(Base):
             postgresql_where=text("institution_id IS NULL"),
         ),
         Index("ix_assets_institution_id", "institution_id"),
+        CheckConstraint(
+            "manufacture_year IS NULL OR manufacture_year BETWEEN 1900 AND 2200",
+            name="ck_assets_manufacture_year",
+        ),
+        CheckConstraint(
+            "criticality IN ('standard', 'important', 'mission_critical')",
+            name="ck_assets_criticality",
+        ),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -41,6 +56,9 @@ class Asset(Base):
     asset_type: Mapped[str] = mapped_column(String(80), index=True)
     make: Mapped[str | None] = mapped_column(String(80), nullable=True)
     model: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    registration_number: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    manufacture_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    criticality: Mapped[str] = mapped_column(String(20), default="standard")
     acquisition_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_inspected_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     last_service_date: Mapped[date | None] = mapped_column(Date, nullable=True)
@@ -59,21 +77,74 @@ class Asset(Base):
         order_by="InspectionRecord.inspected_on",
     )
 
+    usage_readings: Mapped[list["AssetUsageReading"]] = relationship(
+        back_populates="asset",
+        cascade="all, delete-orphan",
+        order_by="AssetUsageReading.recorded_on",
+    )
+
 
 class MaintenanceRecord(Base):
     __tablename__ = "maintenance_records"
+    __table_args__ = (
+        CheckConstraint(
+            "downtime_hours IS NULL OR downtime_hours >= 0",
+            name="ck_maintenance_downtime_nonnegative",
+        ),
+        CheckConstraint(
+            "odometer_km IS NULL OR odometer_km >= 0",
+            name="ck_maintenance_odometer_nonnegative",
+        ),
+        CheckConstraint(
+            "cost_amount IS NULL OR cost_amount >= 0",
+            name="ck_maintenance_cost_nonnegative",
+        ),
+        CheckConstraint("currency = 'RWF'", name="ck_maintenance_currency"),
+        Index("ix_maintenance_records_asset_event", "asset_id", "event_date"),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"), index=True)
+    asset_id: Mapped[int] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
     event_date: Mapped[date] = mapped_column(Date, index=True)
     category: Mapped[str] = mapped_column(String(80))
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     planned: Mapped[bool] = mapped_column(Boolean, default=False)
     downtime_hours: Mapped[float | None] = mapped_column(Float, nullable=True)
+    odometer_km: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cost_amount: Mapped[float | None] = mapped_column(Numeric(14, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), default="RWF")
+    provider_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    work_order_reference: Mapped[str | None] = mapped_column(String(100), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     asset: Mapped[Asset] = relationship(back_populates="maintenance_records")
+
+
+class AssetUsageReading(Base):
+    __tablename__ = "asset_usage_readings"
+    __table_args__ = (
+        UniqueConstraint("asset_id", "recorded_on", name="uq_usage_asset_recorded_on"),
+        CheckConstraint("odometer_km >= 0", name="ck_usage_odometer_nonnegative"),
+        CheckConstraint(
+            "source IN ('manual', 'maintenance', 'import')",
+            name="ck_usage_source",
+        ),
+        Index("ix_usage_asset_recorded", "asset_id", "recorded_on"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    asset_id: Mapped[int] = mapped_column(
+        ForeignKey("assets.id", ondelete="CASCADE")
+    )
+    recorded_on: Mapped[date] = mapped_column(Date)
+    odometer_km: Mapped[float] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(40), default="manual")
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    asset: Mapped[Asset] = relationship(back_populates="usage_readings")
 
 
 class InspectionRecord(Base):
@@ -205,3 +276,4 @@ class InstitutionMembership(Base):
     )
     role: Mapped[str] = mapped_column(String(40))
     institution: Mapped[Institution] = relationship()
+

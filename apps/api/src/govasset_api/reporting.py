@@ -75,12 +75,12 @@ def _assemble_operations_report(
         downtime_hours_recorded=round(float(maintenance_totals[3] or 0), 2),
         maintenance_records_without_downtime=int(maintenance_totals[4] or 0),
         untracked_domains=[
-            "usage readings",
             "parts used",
-            "maintenance costs",
             "work-order status",
             "source-system lineage and import freshness",
             "recommendation actor identity",
+            "driver assignments and trip history",
+            "route, load, weather, and component fault telemetry",
         ],
     )
 
@@ -144,8 +144,6 @@ def _descendants_by_root(institutions: Iterable[Institution]) -> dict[int, set[i
             children[institution.parent_institution_id].append(institution.id)
     result: dict[int, set[int]] = {}
     for root in institution_list:
-        if root.parent_institution_id is not None:
-            continue
         descendants: set[int] = set()
         queue: deque[int] = deque([root.id])
         while queue:
@@ -185,8 +183,10 @@ def build_institution_tree_report(
         institution
         for institution in institutions
         if institution.active
-        and institution.parent_institution_id is None
-        and (root_ids is None or institution.id in root_ids)
+        and (
+            (root_ids is None and institution.parent_institution_id is None)
+            or (root_ids is not None and institution.id in root_ids)
+        )
     ]
     type_order = {"ministry": 0, "city": 1, "province": 2}
     roots.sort(key=lambda item: (type_order.get(item.institution_type, 3), item.name))

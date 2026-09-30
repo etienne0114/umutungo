@@ -13,6 +13,19 @@ class AssetCondition(StrEnum):
     UNKNOWN = "unknown"
 
 
+class AssetCriticality(StrEnum):
+    STANDARD = "standard"
+    IMPORTANT = "important"
+    MISSION_CRITICAL = "mission_critical"
+
+
+class UsageReadingSource(StrEnum):
+    MANUAL = "manual"
+    IMPORT = "import"
+    TELEMATICS = "telematics"
+    MAINTENANCE = "maintenance"
+
+
 class RiskLevel(StrEnum):
     CRITICAL = "critical"
     HIGH = "high"
@@ -136,6 +149,9 @@ class AssetCreate(BaseModel):
     asset_type: str = Field(min_length=1, max_length=80)
     make: str | None = Field(default=None, max_length=80)
     model: str | None = Field(default=None, max_length=80)
+    registration_number: str | None = Field(default=None, max_length=40)
+    manufacture_year: int | None = Field(default=None, ge=1900, le=2200)
+    criticality: AssetCriticality = AssetCriticality.STANDARD
     acquisition_date: date | None = None
     last_service_date: date | None = None
     next_service_due: date | None = None
@@ -160,6 +176,9 @@ class AssetUpdate(BaseModel):
     asset_type: str | None = Field(default=None, min_length=1, max_length=80)
     make: str | None = Field(default=None, max_length=80)
     model: str | None = Field(default=None, max_length=80)
+    registration_number: str | None = Field(default=None, max_length=40)
+    manufacture_year: int | None = Field(default=None, ge=1900, le=2200)
+    criticality: AssetCriticality | None = None
     acquisition_date: date | None = None
     last_service_date: date | None = None
     next_service_due: date | None = None
@@ -176,6 +195,9 @@ class AssetRead(BaseModel):
     asset_type: str
     make: str | None
     model: str | None
+    registration_number: str | None
+    manufacture_year: int | None
+    criticality: AssetCriticality
     acquisition_date: date | None
     last_inspected_on: date | None
     last_service_date: date | None
@@ -193,6 +215,11 @@ class MaintenanceCreate(BaseModel):
     description: str | None = Field(default=None, max_length=4000)
     planned: bool = False
     downtime_hours: float | None = Field(default=None, ge=0)
+    odometer_km: float | None = Field(default=None, ge=0)
+    cost_amount: float | None = Field(default=None, ge=0)
+    currency: str = Field(default="RWF", pattern=r"^RWF$")
+    provider_name: str | None = Field(default=None, max_length=200)
+    work_order_reference: str | None = Field(default=None, max_length=100)
 
 
 class MaintenanceRead(BaseModel):
@@ -205,6 +232,32 @@ class MaintenanceRead(BaseModel):
     description: str | None
     planned: bool
     downtime_hours: float | None
+    odometer_km: float | None
+    cost_amount: float | None
+    currency: str
+    provider_name: str | None
+    work_order_reference: str | None
+    created_at: datetime
+
+
+class UsageReadingCreate(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
+    recorded_on: date
+    odometer_km: float = Field(ge=0)
+    source: UsageReadingSource = UsageReadingSource.MANUAL
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class UsageReadingRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    asset_id: int
+    recorded_on: date
+    odometer_km: float
+    source: UsageReadingSource
+    notes: str | None
     created_at: datetime
 
 
@@ -354,3 +407,116 @@ class InstitutionTreeReport(BaseModel):
     root_count: int
     unassigned_assets: int
     rows: list[InstitutionReportRow]
+
+
+class MaintenanceIntervalRead(BaseModel):
+    sequence_number: int
+    from_event_id: int
+    to_event_id: int
+    from_date: date
+    to_date: date
+    days_between: int
+    from_odometer_km: float | None
+    to_odometer_km: float | None
+    distance_km: float | None
+
+
+class HistoricalForecastRead(BaseModel):
+    status: str
+    method: str
+    estimated_next_service_date: date | None
+    estimated_interval_days: float | None
+    evidence_event_count: int
+    explanation: str
+    limitations: list[str]
+
+
+class ModelReadinessRead(BaseModel):
+    status: str
+    usable_for_trained_model: bool
+    maintenance_event_count: int
+    usage_reading_count: int
+    fields_present: list[str]
+    missing_requirements: list[str]
+
+
+class AssetMaintenanceAnalytics(BaseModel):
+    generated_on: date
+    asset: AssetRead
+    asset_age_days: int | None
+    asset_age_years: float | None
+    first_maintenance_date: date | None
+    last_maintenance_date: date | None
+    days_since_last_maintenance: int | None
+    maintenance_event_count: int
+    planned_event_count: int
+    unplanned_event_count: int
+    unplanned_share: float | None
+    total_downtime_hours: float
+    total_cost_amount: float
+    cost_currency: str
+    most_common_category: str | None
+    most_common_category_count: int
+    mean_interval_days: float | None
+    median_interval_days: float | None
+    shortest_interval_days: int | None
+    longest_interval_days: int | None
+    interval_trend: str
+    intervals: list[MaintenanceIntervalRead]
+    latest_odometer_km: float | None
+    latest_odometer_date: date | None
+    usage_reading_count: int
+    distance_recorded_km: float | None
+    risk_level: RiskLevel
+    risk_reasons: list[str]
+    recommended_action: str
+    rule_version: str
+    forecast: HistoricalForecastRead
+    model_readiness: ModelReadinessRead
+
+
+class InstitutionMaintenanceAnalytics(BaseModel):
+    institution: InstitutionRead
+    descendant_count: int
+    asset_count: int
+    active_asset_count: int
+    assets_with_maintenance: int
+    maintenance_history_coverage: float | None
+    maintenance_event_count: int
+    events_per_asset: float | None
+    planned_event_count: int
+    unplanned_event_count: int
+    unplanned_share: float | None
+    total_downtime_hours: float
+    downtime_hours_per_asset: float | None
+    total_cost_amount: float
+    cost_currency: str
+    overdue_service_assets: int
+    priority_asset_count: int
+
+
+class InstitutionMaintenanceComparison(BaseModel):
+    generated_on: date
+    scope_name: str
+    methodology: str
+    rows: list[InstitutionMaintenanceAnalytics]
+
+
+class MaintenanceAnalyticsOverview(BaseModel):
+    generated_on: date
+    scope_name: str
+    included_institutions: int
+    asset_count: int
+    assets_with_maintenance: int
+    maintenance_event_count: int
+    planned_event_count: int
+    unplanned_event_count: int
+    unplanned_share: float | None
+    total_downtime_hours: float
+    total_cost_amount: float
+    cost_currency: str
+    overdue_service_assets: int
+    priority_asset_count: int
+    assets_with_usage_readings: int
+    model_ready_asset_count: int
+    data_quality_notes: list[str]

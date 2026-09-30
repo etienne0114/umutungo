@@ -179,7 +179,8 @@ def test_operations_report_exposes_data_gaps_and_operational_totals(client):
     assert report["overdue_service_assets"] == 1
     assert report["unplanned_maintenance_records"] == 1
     assert report["downtime_hours_recorded"] == 2.5
-    assert "maintenance costs" in report["untracked_domains"]
+    assert "maintenance costs" not in report["untracked_domains"]
+    assert "parts used" in report["untracked_domains"]
 
 
 def test_csv_exports_have_headers_and_prevent_spreadsheet_formula_injection(client):
@@ -194,7 +195,9 @@ def test_csv_exports_have_headers_and_prevent_spreadsheet_formula_injection(clie
     assert response.headers["content-type"].startswith("text/csv")
     assert 'filename="umutungo-assets.csv"' in response.headers["content-disposition"]
     assert "'=HYPERLINK" in response.text
-    assert response.text.splitlines()[0].startswith("asset_code,asset_type")
+    assert response.text.splitlines()[0].startswith(
+        "institution_id,asset_code,asset_type"
+    )
 
 
 def test_csv_export_rejects_more_than_the_safe_row_limit(client, monkeypatch):
@@ -1082,7 +1085,8 @@ def test_tenant_data_isolation_for_assets_reports_exports_triage_and_events(
     assert register_membership(client, user_a, first["id"], "fleet_manager").status_code == 201
     assert register_membership(client, user_b, second["id"], "fleet_manager").status_code == 201
 
-    legacy = create_asset(client, asset_code="LEGACY-NULL", condition="poor").json()
+    unassigned = create_asset(client, asset_code="LEGACY-NULL", condition="poor")
+    assert unassigned.status_code == 422
     asset_a = client.post(
         f"/api/v1/assets?institution_id={first['id']}",
         json={
@@ -1204,8 +1208,7 @@ def test_tenant_data_isolation_for_assets_reports_exports_triage_and_events(
         monkeypatch,
         {"sub": "global-admin", "app_metadata": {"govasset_role": "admin"}},
     )
-    assert len(client.get("/api/v1/assets").json()) == 4
-    assert legacy["id"] in {row["id"] for row in client.get("/api/v1/assets").json()}
+    assert len(client.get("/api/v1/assets").json()) == 3
 
 
 def test_membership_required_and_read_only_roles_cannot_mutate(client, monkeypatch):

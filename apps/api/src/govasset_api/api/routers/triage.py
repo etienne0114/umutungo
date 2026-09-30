@@ -1,7 +1,8 @@
 """Explainable rule-based triage and recommendation history endpoints."""
 
+from collections import defaultdict
 from collections.abc import Callable
-from datetime import date
+from datetime import date, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -15,7 +16,7 @@ from govasset_api.authorization import (
     scoped_assets,
     scoped_runs,
 )
-from govasset_api.models import Asset, Recommendation, RecommendationEvent, TriageRun
+from govasset_api.models import Asset, Institution, MaintenanceRecord, Recommendation, RecommendationEvent, TriageRun
 from govasset_api.schemas import (
     RecommendationEventCreate,
     RecommendationEventRead,
@@ -239,5 +240,62 @@ def create_router(
             .order_by(RecommendationEvent.id)
         )
         return session.scalars(query).all()
+
+    @router.get("/triage-runs/{run_id}/insights")
+    def get_triage_run_insights(
+        run_id: int,
+        scope: TenantScope = Depends(current_scope),
+        session: Session = Depends(get_session),
+    ):
+        """Get detailed insights for a triage run including institutional analysis."""
+        run = session.scalar(scoped_runs(select(TriageRun).where(TriageRun.id == run_id), scope))
+        if run is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Triage run not found.",
+            )
+
+        # Get all recommendations for this run
+        recommendations = session.scalars(
+            select(Recommendation)
+            .where(Recommendation.run_id == run_id)
+        ).all()
+
+        # Group by risk level and condition
+        risk_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "insufficient_data": 0}
+        condition_counts = {"critical": 0, "poor": 0, "fair": 0, "good": 0, "unknown": 0}
+        assets_by_condition = {"critical": [], "poor": [], "fair": [], "good": [], "unknown": []}
+        
+        for rec in recommendations:
+            risk_counts[rec.risk_level] = risk_counts.get(rec.risk_level, 0) + 1
+            
+            # Extract condition from asset_snapshot
+            asset_snapshot = rec.asset_snapshot
+            if isinstance(asset_snapshot, str):
+                import json
+                try:
+                    asset = json.loads(asset_snapshot)
+                except json.JSONDecodeError:
+                    asset = {}
+            else:
+                asset = asset_snapshot or {}
+            
+            condition = asset.get("condition", "unknown")
+            condition_counts[condition] = condition_counts.get(condition, 0) + 1
+            
+            asset_code = asset.get("asset_code", "Unknown")
+            if asset_code and asset_code != "Unknown":
+                assets_by_condition[condition].append(asset_code)
+
+        return {
+            "run_id": run_id,
+            "evaluated_on": str(run.evaluated_on),
+            "total_recommendations": len(recommendations),
+            "summary": {
+                "risk_distribution": risk_counts,
+                "condition_distribution": condition_counts,
+            },
+            "assets_by_condition": assets_by_condition,
+        }
 
     return router

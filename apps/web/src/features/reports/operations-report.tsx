@@ -98,6 +98,7 @@ export function OperationsReportView({ isAdmin }: { isAdmin: boolean }) {
       </div>
 
       {error && <div className="feedback-banner error-banner" role="alert"><Icon name="warning" /><span>{error}</span></div>}
+      {treeError && isAdmin && <div className="institution-report-warning"><Icon name="warning" /><span>{treeError}</span></div>}
       {loading && <div className="loading-state"><span className="spinner" />Loading institution report…</div>}
       {!loading && !report && !error && <div className="empty-state"><strong>No report available.</strong></div>}
       {report && (
@@ -123,7 +124,6 @@ export function OperationsReportView({ isAdmin }: { isAdmin: boolean }) {
                 <div><div className="panel-title-row"><h2>Institution tree performance</h2><span className="count-pill">{treeReport.root_count}</span></div><p>Ministries and local-government roots aggregate their descendants once; no assets are duplicated between rows.</p></div>
               </header>
               {treeReport.unassigned_assets > 0 && <div className="institution-report-warning"><Icon name="warning" /><span>{treeReport.unassigned_assets} legacy assets have no institution and appear only in the national total.</span></div>}
-              {treeError && <div className="institution-report-warning"><Icon name="warning" /><span>{treeError}</span></div>}
               <div className="table-scroll">
                 <table className="data-table institution-report-table">
                   <thead><tr><th>Reporting root</th><th>Tree size</th><th>Assets</th><th>Critical / high</th><th>Overdue service</th><th>Missing condition</th></tr></thead>
