@@ -16,6 +16,7 @@ import type {
   RiskLevel,
   TriageItem,
   TriageRun,
+  TriageAnalysis,
   TriageRunInsights,
 } from "./types";
 import type {
@@ -242,7 +243,14 @@ export const api = {
   getAsset: (id: number) => request<Asset>(`/api/v1/assets/${id}`),
   listTriage: (riskLevel?: RiskLevel) =>
     request<TriageItem[]>(`/api/v1/triage${queryString({ risk_level: riskLevel })}`),
-  createTriageRun: () => request<TriageRun>("/api/v1/triage-runs", { method: "POST" }),
+  getTriageAnalysis: (asOf?: string) =>
+    request<TriageAnalysis>(`/api/v1/triage/analysis${queryString({ as_of: asOf })}`),
+  getTriageRunAnalysis: (runId: number) =>
+    request<TriageAnalysis>(`/api/v1/triage-runs/${runId}/analysis`),
+  createTriageRun: (runName?: string) =>
+    request<TriageRun>(`/api/v1/triage-runs${queryString({ run_name: runName })}`, {
+      method: "POST",
+    }),
   listTriageRuns: () => request<TriageRun[]>("/api/v1/triage-runs?limit=100"),
   listRecommendations: (runId?: number) =>
     request<Recommendation[]>(`/api/v1/recommendations${queryString({ run_id: runId, limit: 500 })}`),

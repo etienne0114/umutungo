@@ -1,8 +1,7 @@
 """Explainable rule-based triage and recommendation history endpoints."""
 
-from collections import defaultdict
-from collections.abc import Callable
-from datetime import date, timedelta
+from collections.abc import Callable, Sequence
+from datetime import date
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -16,14 +15,26 @@ from govasset_api.authorization import (
     scoped_assets,
     scoped_runs,
 )
-from govasset_api.models import Asset, Institution, MaintenanceRecord, Recommendation, RecommendationEvent, TriageRun
+from govasset_api.models import Asset, Institution, Recommendation, RecommendationEvent, TriageRun
 from govasset_api.schemas import (
+    AssetAssessmentRead,
+    AssetRead,
+    InstitutionAssessmentRead,
     RecommendationEventCreate,
     RecommendationEventRead,
     RecommendationRead,
     RiskLevel,
+    TriageAnalysisRead,
     TriageItem,
     TriageRunRead,
+    TriageSummaryRead,
+)
+from govasset_api.services.institution_analysis import build_institution_assessments
+from govasset_api.services.risk_engine import ENGINE_VERSION, AssetAssessment
+from govasset_api.services.triage_service import (
+    TriageAnalysis,
+    build_triage_analysis,
+    summarize,
 )
 from govasset_api.triage import RULE_VERSION, assess_asset
 
@@ -34,6 +45,154 @@ RISK_RANK = {
     RiskLevel.INSUFFICIENT_DATA: 3,
     RiskLevel.LOW: 4,
 }
+
+PRIORITY_RANK = {"urgent": 0, "high": 1, "medium": 2, "low": 3, "monitor": 4}
+
+
+def _load_institutions(session: Session, institution_ids: set[int]) -> dict[int, tuple[str, str | None]]:
+    if not institution_ids:
+        return {}
+    rows = session.execute(
+        select(Institution.id, Institution.name, Institution.code).where(
+            Institution.id.in_(institution_ids)
+        )
+    ).all()
+    return {int(row[0]): (row[1], row[2]) for row in rows}
+
+
+def _scope_name(session: Session, scope: TenantScope) -> str:
+    if scope.institution_id is None:
+        return "All government institutions"
+    institution = session.get(Institution, scope.institution_id)
+    return institution.name if institution else "All government institutions"
+
+
+def _sorted_assessments(assessments: Sequence[AssetAssessment]) -> list[AssetAssessment]:
+    return sorted(
+        assessments,
+        key=lambda item: (
+            -(item.risk_score if item.risk_score is not None else -1),
+            PRIORITY_RANK.get(item.maintenance_priority, 5),
+            item.asset_code,
+        ),
+    )
+
+
+def _analysis_read(
+    analysis: TriageAnalysis,
+    engine_version: str,
+    run_id: int | None,
+) -> TriageAnalysisRead:
+    return TriageAnalysisRead(
+        generated_on=analysis.generated_on,
+        scope_name=analysis.scope_name,
+        engine_version=engine_version,
+        persisted_run_id=run_id,
+        summary=TriageSummaryRead.model_validate(analysis.summary, from_attributes=True),
+        institutions=[
+            InstitutionAssessmentRead.model_validate(item, from_attributes=True)
+            for item in analysis.institutions
+        ],
+        assets=[
+            AssetAssessmentRead.model_validate(item, from_attributes=True)
+            for item in _sorted_assessments(analysis.assets)
+        ],
+    )
+
+
+def _assessment_from_recommendation(
+    recommendation: Recommendation,
+    institutions_by_id: dict[int, tuple[str, str | None]],
+) -> AssetAssessment:
+    snapshot = recommendation.asset_snapshot or {}
+    institution_name = None
+    if recommendation.institution_id is not None:
+        institution_name = institutions_by_id.get(recommendation.institution_id, (None, None))[0]
+    return AssetAssessment(
+        asset_id=recommendation.asset_id,
+        institution_id=recommendation.institution_id,
+        institution_name=institution_name,
+        asset_code=recommendation.asset_code or snapshot.get("asset_code", ""),
+        asset_type=snapshot.get("asset_type", ""),
+        make=snapshot.get("make"),
+        model=snapshot.get("model"),
+        registration_number=snapshot.get("registration_number"),
+        criticality=snapshot.get("criticality", "standard"),
+        condition=snapshot.get("condition", "unknown"),
+        asset_age_years=recommendation.asset_age_years,
+        maintenance_count=recommendation.maintenance_count or 0,
+        maintenance_frequency=recommendation.maintenance_frequency,
+        days_since_last_maintenance=recommendation.days_since_last_maintenance,
+        recent_window_count=recommendation.recent_window_count or 0,
+        recent_repeat_count=recommendation.recent_repeat_count or 0,
+        unplanned_share=recommendation.unplanned_share,
+        total_downtime_hours=recommendation.total_downtime_hours or 0.0,
+        has_maintenance_history=bool(recommendation.has_maintenance_history),
+        risk_score=recommendation.risk_score,
+        risk_level=recommendation.risk_level,
+        factor_scores=recommendation.factor_scores or {},
+        factor_weights={},
+        priority_score=recommendation.priority_score or 0,
+        maintenance_priority=recommendation.maintenance_priority or "monitor",
+        replacement_score=recommendation.replacement_score or 0,
+        replacement_candidate=bool(recommendation.replacement_candidate),
+        recommendation=recommendation.recommended_action,
+        reasons=list(recommendation.reasons or []),
+        evidence=list(recommendation.evidence or []),
+    )
+
+
+def _reconstruct_run_analysis(
+    session: Session,
+    run: TriageRun,
+) -> TriageAnalysis:
+    recommendations = session.scalars(
+        select(Recommendation).where(Recommendation.run_id == run.id)
+    ).all()
+    institutions_by_id = _load_institutions(
+        session,
+        {rec.institution_id for rec in recommendations if rec.institution_id is not None},
+    )
+    assessments = [
+        _assessment_from_recommendation(rec, institutions_by_id) for rec in recommendations
+    ]
+    institutions = build_institution_assessments(
+        assessments, institutions_by_id, run.evaluated_on
+    )
+    summary = summarize(assessments, institutions)
+    summary.data_quality_notes = _assessment_quality_notes(assessments)
+    return TriageAnalysis(
+        generated_on=run.evaluated_on,
+        scope_name=_run_scope_name(session, run),
+        summary=summary,
+        institutions=institutions,
+        assets=assessments,
+    )
+
+
+def _run_scope_name(session: Session, run: TriageRun) -> str:
+    if run.institution_id is None:
+        return "All government institutions"
+    institution = session.get(Institution, run.institution_id)
+    return institution.name if institution else "All government institutions"
+
+
+def _assessment_quality_notes(assessments: Sequence[AssetAssessment]) -> list[str]:
+    notes: list[str] = []
+    without_history = sum(1 for item in assessments if not item.has_maintenance_history)
+    without_age = sum(1 for item in assessments if item.asset_age_years is None)
+    unknown_condition = sum(1 for item in assessments if item.condition == "unknown")
+    if without_history:
+        notes.append(
+            f"{without_history} asset(s) had no recorded maintenance history at the time of this run."
+        )
+    if without_age:
+        notes.append(
+            f"{without_age} asset(s) were missing age data, so age-based factors were excluded."
+        )
+    if unknown_condition:
+        notes.append(f"{unknown_condition} asset(s) had an unknown recorded condition.")
+    return notes
 
 
 def _run_read(session: Session, run: TriageRun) -> TriageRunRead:
@@ -47,6 +206,15 @@ def _run_read(session: Session, run: TriageRun) -> TriageRunRead:
         rule_version=run.rule_version,
         created_at=run.created_at,
         recommendation_count=count or 0,
+        run_name=run.run_name,
+        status=run.status or "completed",
+        engine_version=run.engine_version,
+        total_institutions=run.total_institutions or 0,
+        total_assets=run.total_assets or 0,
+        high_risk_assets=run.high_risk_assets or 0,
+        critical_assets=run.critical_assets or 0,
+        maintenance_candidates=run.maintenance_candidates or 0,
+        replacement_candidates=run.replacement_candidates or 0,
     )
 
 
@@ -74,6 +242,31 @@ def create_router(
             items = [item for item in items if item.risk_level == risk_level]
         return sorted(items, key=lambda item: (RISK_RANK[item.risk_level], item.asset.asset_code))
 
+    @router.get("/triage/analysis", response_model=TriageAnalysisRead)
+    def triage_analysis(
+        as_of: date | None = Query(default=None, description="Evaluation date; defaults to today."),
+        scope: TenantScope = Depends(current_scope),
+        session: Session = Depends(get_session),
+    ):
+        """Preview the deterministic maintenance analysis without persisting it."""
+        evaluated_on = as_of or date.today()
+        assets = session.scalars(
+            scoped_assets(select(Asset), scope)
+            .where(Asset.active.is_(True))
+            .order_by(Asset.asset_code)
+        ).all()
+        institutions_by_id = _load_institutions(
+            session, {asset.institution_id for asset in assets if asset.institution_id is not None}
+        )
+        analysis = build_triage_analysis(
+            session,
+            assets,
+            evaluated_on,
+            institutions_by_id,
+            scope_name=_scope_name(session, scope),
+        )
+        return _analysis_read(analysis, ENGINE_VERSION, None)
+
     @router.post(
         "/triage-runs",
         response_model=TriageRunRead,
@@ -81,6 +274,7 @@ def create_router(
     )
     def create_triage_run(
         as_of: date | None = Query(default=None, description="Evaluation date; defaults to today."),
+        run_name: str | None = Query(default=None, max_length=200),
         scope: TenantScope = Depends(current_scope),
         session: Session = Depends(get_session),
     ):
@@ -91,25 +285,69 @@ def create_router(
             .where(Asset.active.is_(True))
             .order_by(Asset.asset_code)
         ).all()
+        institutions_by_id = _load_institutions(
+            session, {asset.institution_id for asset in assets if asset.institution_id is not None}
+        )
+        analysis = build_triage_analysis(
+            session,
+            assets,
+            evaluated_on,
+            institutions_by_id,
+            scope_name=_scope_name(session, scope),
+        )
+        summary = analysis.summary
         run = TriageRun(
             institution_id=scope.institution_id,
             evaluated_on=evaluated_on,
             rule_version=RULE_VERSION,
+            run_name=run_name or f"Maintenance triage {evaluated_on.isoformat()}",
+            status="completed",
+            engine_version=ENGINE_VERSION,
+            total_institutions=summary.total_institutions,
+            total_assets=summary.total_assets,
+            high_risk_assets=summary.high_risk_assets,
+            critical_assets=summary.critical_assets,
+            maintenance_candidates=summary.maintenance_candidates,
+            replacement_candidates=summary.replacement_candidates,
         )
         session.add(run)
         session.flush()
-        for asset in assets:
-            item = assess_asset(asset, evaluated_on)
+        assets_by_id = {asset.id: asset for asset in assets}
+        for item in analysis.assets:
+            asset = assets_by_id.get(item.asset_id)
+            snapshot = (
+                AssetRead.model_validate(asset).model_dump(mode="json")
+                if asset is not None
+                else {}
+            )
             session.add(
                 Recommendation(
                     run_id=run.id,
-                    asset_id=asset.id,
-                    risk_level=item.risk_level.value,
+                    asset_id=item.asset_id,
+                    institution_id=item.institution_id,
+                    asset_code=item.asset_code,
+                    risk_level=item.risk_level,
+                    risk_score=item.risk_score,
+                    factor_scores=item.factor_scores,
+                    maintenance_priority=item.maintenance_priority,
+                    priority_score=item.priority_score,
+                    replacement_score=item.replacement_score,
+                    replacement_candidate=item.replacement_candidate,
+                    maintenance_count=item.maintenance_count,
+                    maintenance_frequency=item.maintenance_frequency,
+                    asset_age_years=item.asset_age_years,
+                    days_since_last_maintenance=item.days_since_last_maintenance,
+                    recent_window_count=item.recent_window_count,
+                    recent_repeat_count=item.recent_repeat_count,
+                    unplanned_share=item.unplanned_share,
+                    total_downtime_hours=item.total_downtime_hours,
+                    has_maintenance_history=item.has_maintenance_history,
                     reasons=item.reasons,
-                    recommended_action=item.recommended_action,
-                    rule_version=item.rule_version,
-                    evaluated_on=item.evaluated_on,
-                    asset_snapshot=item.asset.model_dump(mode="json"),
+                    evidence=item.evidence,
+                    recommended_action=item.recommendation,
+                    rule_version=ENGINE_VERSION,
+                    evaluated_on=evaluated_on,
+                    asset_snapshot=snapshot,
                 )
             )
         session.commit()
@@ -123,26 +361,13 @@ def create_router(
         scope: TenantScope = Depends(current_scope),
         session: Session = Depends(get_session),
     ):
-        rows = session.execute(
+        runs = session.scalars(
             scoped_runs(select(TriageRun), scope)
-            .add_columns(func.count(Recommendation.id))
-            .outerjoin(Recommendation, Recommendation.run_id == TriageRun.id)
-            .group_by(TriageRun.id)
             .order_by(TriageRun.id.desc())
             .offset(offset)
             .limit(limit)
         ).all()
-        return [
-            TriageRunRead(
-                id=run.id,
-                institution_id=run.institution_id,
-                evaluated_on=run.evaluated_on,
-                rule_version=run.rule_version,
-                created_at=run.created_at,
-                recommendation_count=count,
-            )
-            for run, count in rows
-        ]
+        return [_run_read(session, run) for run in runs]
 
     @router.get("/triage-runs/{run_id}", response_model=TriageRunRead)
     def get_triage_run(
@@ -157,6 +382,61 @@ def create_router(
                 detail="Triage run not found.",
             )
         return _run_read(session, run)
+
+    @router.get("/triage-runs/{run_id}/analysis", response_model=TriageAnalysisRead)
+    def get_triage_run_analysis(
+        run_id: int,
+        scope: TenantScope = Depends(current_scope),
+        session: Session = Depends(get_session),
+    ):
+        """Reproduce the saved snapshot: summary, institution priorities, and assets."""
+        run = session.scalar(scoped_runs(select(TriageRun).where(TriageRun.id == run_id), scope))
+        if run is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Triage run not found.",
+            )
+        analysis = _reconstruct_run_analysis(session, run)
+        return _analysis_read(analysis, run.engine_version or ENGINE_VERSION, run.id)
+
+    @router.get(
+        "/triage-runs/{run_id}/institutions",
+        response_model=list[InstitutionAssessmentRead],
+    )
+    def get_triage_run_institutions(
+        run_id: int,
+        scope: TenantScope = Depends(current_scope),
+        session: Session = Depends(get_session),
+    ):
+        run = session.scalar(scoped_runs(select(TriageRun).where(TriageRun.id == run_id), scope))
+        if run is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Triage run not found.",
+            )
+        analysis = _reconstruct_run_analysis(session, run)
+        return [
+            InstitutionAssessmentRead.model_validate(item, from_attributes=True)
+            for item in analysis.institutions
+        ]
+
+    @router.get("/triage-runs/{run_id}/assets", response_model=list[AssetAssessmentRead])
+    def get_triage_run_assets(
+        run_id: int,
+        scope: TenantScope = Depends(current_scope),
+        session: Session = Depends(get_session),
+    ):
+        run = session.scalar(scoped_runs(select(TriageRun).where(TriageRun.id == run_id), scope))
+        if run is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Triage run not found.",
+            )
+        analysis = _reconstruct_run_analysis(session, run)
+        return [
+            AssetAssessmentRead.model_validate(item, from_attributes=True)
+            for item in _sorted_assessments(analysis.assets)
+        ]
 
     @router.get("/recommendations", response_model=list[RecommendationRead])
     def list_recommendations(

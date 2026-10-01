@@ -302,6 +302,15 @@ class TriageRunRead(BaseModel):
     rule_version: str
     created_at: datetime
     recommendation_count: int
+    run_name: str | None = None
+    status: str = "completed"
+    engine_version: str | None = None
+    total_institutions: int = 0
+    total_assets: int = 0
+    high_risk_assets: int = 0
+    critical_assets: int = 0
+    maintenance_candidates: int = 0
+    replacement_candidates: int = 0
 
 
 class RecommendationRead(BaseModel):
@@ -317,6 +326,111 @@ class RecommendationRead(BaseModel):
     evaluated_on: date
     asset_snapshot: AssetRead
     created_at: datetime
+    institution_id: int | None = None
+    asset_code: str | None = None
+    risk_score: int | None = None
+    factor_scores: dict[str, float] | None = None
+    maintenance_priority: str | None = None
+    priority_score: int | None = None
+    replacement_score: int | None = None
+    replacement_candidate: bool = False
+    maintenance_count: int = 0
+    maintenance_frequency: float | None = None
+    asset_age_years: float | None = None
+    days_since_last_maintenance: int | None = None
+    recent_window_count: int = 0
+    recent_repeat_count: int = 0
+    unplanned_share: float | None = None
+    total_downtime_hours: float = 0.0
+    has_maintenance_history: bool = False
+    evidence: list[str] | None = None
+
+
+class AssetAssessmentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    asset_id: int
+    institution_id: int | None
+    institution_name: str | None
+    asset_code: str
+    asset_type: str
+    make: str | None
+    model: str | None
+    registration_number: str | None
+    criticality: AssetCriticality
+    condition: AssetCondition
+    asset_age_years: float | None
+    maintenance_count: int
+    maintenance_frequency: float | None
+    days_since_last_maintenance: int | None
+    recent_window_count: int
+    recent_repeat_count: int
+    unplanned_share: float | None
+    total_downtime_hours: float
+    has_maintenance_history: bool
+    risk_score: int | None
+    risk_level: RiskLevel
+    factor_scores: dict[str, float]
+    priority_score: int
+    maintenance_priority: str
+    replacement_score: int
+    replacement_candidate: bool
+    recommendation: str
+    reasons: list[str]
+    evidence: list[str]
+
+
+class InstitutionAssessmentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    institution_id: int | None
+    institution_name: str
+    institution_code: str | None
+    total_assets: int
+    high_risk_assets: int
+    critical_assets: int
+    medium_risk_assets: int
+    low_risk_assets: int
+    insufficient_data_assets: int
+    maintenance_candidates: int
+    replacement_candidates: int
+    maintenance_events: int
+    average_age_years: float | None
+    events_per_asset: float | None
+    maintenance_frequency: float | None
+    high_risk_ratio: float
+    critical_ratio: float
+    replacement_ratio: float | None
+    priority_score: int
+    priority_level: str
+    reasons: list[str]
+
+
+class TriageSummaryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    total_institutions: int
+    total_assets: int
+    high_risk_assets: int
+    critical_assets: int
+    medium_risk_assets: int
+    low_risk_assets: int
+    insufficient_data_assets: int
+    maintenance_candidates: int
+    replacement_candidates: int
+    maintenance_events: int
+    assets_with_maintenance_history: int
+    data_quality_notes: list[str]
+
+
+class TriageAnalysisRead(BaseModel):
+    generated_on: date
+    scope_name: str
+    engine_version: str
+    persisted_run_id: int | None = None
+    summary: TriageSummaryRead
+    institutions: list[InstitutionAssessmentRead]
+    assets: list[AssetAssessmentRead]
 
 
 class RecommendationEventCreate(BaseModel):

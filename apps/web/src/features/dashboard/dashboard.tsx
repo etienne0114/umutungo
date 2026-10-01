@@ -16,6 +16,7 @@ import { AccessManagement } from "@/features/admin/access-management";
 import { InstitutionManagement } from "@/features/admin/institution-management";
 import { ProfilePanel, avatarInitials } from "@/features/profile/profile-panel";
 import { OperationsReportView } from "@/features/reports/operations-report";
+import { MaintenanceTriage } from "./maintenance-triage";
 import { TriageInsightsModal } from "./triage-insights-modal";
 import { api, setActiveInstitutionId } from "@/lib/api/client";
 import type { Institution } from "@/lib/api/institutions";
@@ -46,6 +47,7 @@ const navigation: { id: Exclude<View, "users" | "institutions">; label: string; 
   { id: "overview", label: "Overview", icon: "overview" },
   { id: "assets", label: "Asset register", icon: "assets" },
   { id: "recommendations", label: "Recommendations", icon: "recommendations" },
+  { id: "analytics", label: "Maintenance Triage", icon: "activity" },
   { id: "reports", label: "Data quality", icon: "reports" },
 ];
 
@@ -634,6 +636,13 @@ export function Dashboard({
               onViewInsights={(runId) => setShowTriageInsights(runId)}
               recommendations={recommendations}
               runs={runs}
+            />
+          )}
+          {view === "analytics" && !institutionSelectionRequired && (
+            <MaintenanceTriage
+              canRunTriage={canRunTriage}
+              key={activeInstitutionId ?? "all-institutions"}
+              scopeName={activeInstitution?.name ?? "All government institutions"}
             />
           )}
           {view === "institutions" && isAdmin && <InstitutionManagement />}

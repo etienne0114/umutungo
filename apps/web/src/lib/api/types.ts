@@ -69,6 +69,98 @@ export interface TriageRun {
   rule_version: string;
   created_at: string;
   recommendation_count: number;
+  run_name?: string | null;
+  status?: string;
+  engine_version?: string | null;
+  total_institutions?: number;
+  total_assets?: number;
+  high_risk_assets?: number;
+  critical_assets?: number;
+  maintenance_candidates?: number;
+  replacement_candidates?: number;
+}
+
+export type MaintenancePriority = "urgent" | "high" | "medium" | "low" | "monitor";
+
+export interface AssetAssessment {
+  asset_id: number;
+  institution_id: number | null;
+  institution_name: string | null;
+  asset_code: string;
+  asset_type: string;
+  make: string | null;
+  model: string | null;
+  registration_number: string | null;
+  criticality: AssetCriticality;
+  condition: AssetCondition;
+  asset_age_years: number | null;
+  maintenance_count: number;
+  maintenance_frequency: number | null;
+  days_since_last_maintenance: number | null;
+  recent_window_count: number;
+  recent_repeat_count: number;
+  unplanned_share: number | null;
+  total_downtime_hours: number;
+  has_maintenance_history: boolean;
+  risk_score: number | null;
+  risk_level: RiskLevel;
+  factor_scores: Record<string, number>;
+  priority_score: number;
+  maintenance_priority: MaintenancePriority;
+  replacement_score: number;
+  replacement_candidate: boolean;
+  recommendation: string;
+  reasons: string[];
+  evidence: string[];
+}
+
+export interface InstitutionAssessment {
+  institution_id: number | null;
+  institution_name: string;
+  institution_code: string | null;
+  total_assets: number;
+  high_risk_assets: number;
+  critical_assets: number;
+  medium_risk_assets: number;
+  low_risk_assets: number;
+  insufficient_data_assets: number;
+  maintenance_candidates: number;
+  replacement_candidates: number;
+  maintenance_events: number;
+  average_age_years: number | null;
+  events_per_asset: number | null;
+  maintenance_frequency: number | null;
+  high_risk_ratio: number;
+  critical_ratio: number;
+  replacement_ratio: number | null;
+  priority_score: number;
+  priority_level: MaintenancePriority;
+  reasons: string[];
+}
+
+export interface TriageSummary {
+  total_institutions: number;
+  total_assets: number;
+  high_risk_assets: number;
+  critical_assets: number;
+  medium_risk_assets: number;
+  low_risk_assets: number;
+  insufficient_data_assets: number;
+  maintenance_candidates: number;
+  replacement_candidates: number;
+  maintenance_events: number;
+  assets_with_maintenance_history: number;
+  data_quality_notes: string[];
+}
+
+export interface TriageAnalysis {
+  generated_on: string;
+  scope_name: string;
+  engine_version: string;
+  persisted_run_id: number | null;
+  summary: TriageSummary;
+  institutions: InstitutionAssessment[];
+  assets: AssetAssessment[];
 }
 
 export interface Recommendation {
@@ -82,6 +174,24 @@ export interface Recommendation {
   evaluated_on: string;
   asset_snapshot: Asset;
   created_at: string;
+  institution_id?: number | null;
+  asset_code?: string | null;
+  risk_score?: number | null;
+  factor_scores?: Record<string, number> | null;
+  maintenance_priority?: MaintenancePriority | null;
+  priority_score?: number | null;
+  replacement_score?: number | null;
+  replacement_candidate?: boolean;
+  maintenance_count?: number;
+  maintenance_frequency?: number | null;
+  asset_age_years?: number | null;
+  days_since_last_maintenance?: number | null;
+  recent_window_count?: number;
+  recent_repeat_count?: number;
+  unplanned_share?: number | null;
+  total_downtime_hours?: number;
+  has_maintenance_history?: boolean;
+  evidence?: string[] | null;
 }
 
 export interface RecommendationEvent {
