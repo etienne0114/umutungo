@@ -22,7 +22,16 @@ def make_engine(database_url: str | None = None):
     if url.startswith("postgresql://"):
         url = url.replace("postgresql://", "postgresql+psycopg://", 1)
     connect_args = {"check_same_thread": False} if url.startswith("sqlite") else {}
-    engine = create_engine(url, connect_args=connect_args)
+    engine_options = {}
+    if os.getenv("VERCEL") and url.startswith("postgresql+psycopg://"):
+        # A warm function reuses one connection through Supavisor transaction pooling.
+        connect_args = {
+            "prepare_threshold": None,
+            "sslmode": "require",
+            "connect_timeout": 10,
+        }
+        engine_options = {"pool_size": 1, "max_overflow": 0, "pool_pre_ping": True}
+    engine = create_engine(url, connect_args=connect_args, **engine_options)
     if engine.dialect.name == "postgresql":
         return engine.execution_options(schema_translate_map={None: "govasset"})
     return engine

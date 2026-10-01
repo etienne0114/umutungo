@@ -16,7 +16,7 @@ uvicorn govasset_api.main:app --reload --host 127.0.0.1 --port 8000
 
 Apply Alembic migrations before starting against Supabase PostgreSQL. `DATABASE_URL` is required; the application has no implicit SQLite runtime database. Back up and verify any pre-Alembic database before stamping or upgrading it.
 
-From the API directory, Uvicorn automatically loads `apps/api/.env.local` during local startup; application environment variables already set in the shell take precedence. The loader is disabled for Render (`RENDER_SERVICE_ID`) and production (`APP_ENV=production`). Keep this file ignored by git. The API `.env` file is not loaded automatically. Set `SUPABASE_URL` to the same Supabase project used by `apps/web/.env.local`. Configure `DATABASE_URL` with the Supabase PostgreSQL pooler connection used by this environment. The automated unit tests construct isolated in-memory SQLite engines explicitly; the application runtime does not default to SQLite. Keep `AUTH_REQUIRED=true` when testing real sign-in and approval claims; use `AUTH_REQUIRED=false` only for isolated local development where authentication is intentionally disabled. Never use development settings for a deployed service.
+From the API directory, Uvicorn automatically loads `apps/api/.env.local` during local startup; application environment variables already set in the shell take precedence. The loader is disabled for Vercel (`VERCEL`), Render (`RENDER_SERVICE_ID`), and production (`APP_ENV=production`). Keep this file ignored by git. The API `.env` file is not loaded automatically. Set `SUPABASE_URL` to the same Supabase project used by `apps/web/.env.local`. Configure `DATABASE_URL` with the Supabase PostgreSQL pooler connection used by this environment. The automated unit tests construct isolated in-memory SQLite engines explicitly; the application runtime does not default to SQLite. Keep `AUTH_REQUIRED=true` when testing real sign-in and approval claims; use `AUTH_REQUIRED=false` only for isolated local development where authentication is intentionally disabled. Never use development settings for a deployed service.
 
 Alternatively, run `npm run dev` from `apps/web` to start the API and frontend together. That command checks the local API health endpoint before launching the frontend.
 
@@ -33,6 +33,7 @@ The initial demonstration rules mark recorded `critical` condition as critical; 
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/health` | Process health |
+| `GET` | `/ready` | Process and database connectivity |
 | `GET` | `/api/v1/admin/users` | Admin-only list of registered account summaries; supports `page` and `per_page` (maximum 100) |
 | `PUT` | `/api/v1/admin/users/{user_id}/access` | Admin-only approve/revoke action for a confirmed account |
 | `GET` | `/api/v1/institutions` | List institutions visible to the signed-in user (global administrators see all) |
@@ -95,7 +96,7 @@ The API supports Supabase Auth bearer-token verification and PostgreSQL for host
 
 The web app supports Supabase email/password registration, email confirmation, sign-in, and password recovery. Supabase Auth must allow email registration and have the production/preview redirect URLs configured. New accounts do not receive application access automatically: only an administrator may set trusted `app_metadata.govasset_access=approved`. Until then, API requests return `403` with an approval-pending message. Approval alone does not grant operational access: a user must also receive an active institution membership.
 
-The API stores its tables in the isolated PostgreSQL `govasset` schema. Apply versioned schema changes with Alembic. The Render start command runs `alembic upgrade head` before starting Uvicorn. For local database migration work, run commands from this directory:
+The API stores its tables in the isolated PostgreSQL `govasset` schema. Apply versioned schema changes with Alembic before deploying a new API version. Vercel functions do not run migrations during startup. For local database migration work, run commands from this directory:
 
 ```bash
 alembic upgrade head
@@ -103,6 +104,25 @@ alembic downgrade -1
 ```
 
 Alembic requires `DATABASE_URL` and targets the configured Supabase PostgreSQL database; there is no fallback database. Never run downgrade or apply a migration against a real hosted database without confirming the target, backup, and migration plan.
+
+### Vercel backend deployment
+
+The `umutungo-backend` Vercel project uses `apps/api` as its Git root and the FastAPI preset. `pyproject.toml` points Vercel to the root `main:app` wrapper, which imports the packaged API; `vercel.json` places the function in Dublin (`dub1`), alongside the Supabase `eu-west-1` database, and excludes tests and operator scripts from the bundle. The Python version is 3.12. The API remains a separate Vercel project from `apps/web`.
+
+Set these Production variables in `umutungo-backend` before deploying:
+
+| Variable | Value |
+|---|---|
+| `APP_ENV` | `production` |
+| `AUTH_REQUIRED` | `true` |
+| `SUPABASE_URL` | The same Supabase Auth project used by the web app |
+| `DATABASE_URL` | The Supabase transaction pooler URL (port `6543`) with `sslmode=require`; store as a sensitive secret |
+| `CORS_ORIGINS` | Exact production web origins, comma separated |
+| `SUPABASE_SECRET_KEY` | Server-only key needed for administrator account-management routes; set when that workflow is used |
+
+The Vercel runtime keeps one pooled PostgreSQL connection per warm function instance, checks stale connections, and disables Psycopg prepared statements for transaction pooling. Apply migrations with an operator connection before publishing a new deployment; the function never creates or upgrades hosted tables.
+
+Connect the Vercel project to this Git repository and deploy from its configured `apps/api` Root Directory. For an emergency CLI deployment, stage only `main.py`, `pyproject.toml`, `requirements.txt`, `.python-version`, `vercel.json`, `.vercelignore`, and the Python source under an `apps/api/` directory; confirm the exact upload manifest with `vercel deploy <staging-directory> --dry --json` before uploading. Do not deploy directly from a working tree containing `.env`, local databases, or unrelated applications. Check the unaliased deployment's `/health`, `/ready`, and protected API behavior before promoting it. Set `NEXT_PUBLIC_API_BASE_URL` on the frontend Vercel project to the backend production URL and redeploy the frontend so its browser bundle uses the new API address.
 
 ### Administrator access
 
@@ -112,7 +132,7 @@ Administrators can review registered accounts in the web app's **User access** v
 
 For local administrator API testing, add `SUPABASE_SECRET_KEY` from the Supabase project's server-side API-key settings (or use the legacy `SUPABASE_SERVICE_ROLE_KEY`) to the ignored `apps/api/.env.local`. The local admin endpoints intentionally return a configuration error without this key. Never copy it into `apps/web/.env.local`, a `NEXT_PUBLIC_*` variable, or source control.
 
-### Render deployment
+### Existing Render fallback
 
 The repository-root `render.yaml` defines a Python web service at `https://umutungo.onrender.com`, rooted at `apps/api`, and configures `/health` as its health check. The service installs `apps/api/requirements.txt`, which delegates dependency definitions to `pyproject.toml`. Connect this repository to Render as a Blueprint and select the `main` branch. During initial Blueprint setup, enter the following values directly in the Render Dashboard:
 

@@ -8,9 +8,10 @@ composition.
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import Engine
+from sqlalchemy import Engine, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from govasset_api.api import create_api_router
 from govasset_api.auth import authentication_required, supabase_url
@@ -42,6 +43,13 @@ def create_app(engine: Engine | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
+        hosted_runtime = engine is None and (
+            bool(os.getenv("VERCEL"))
+            or bool(os.getenv("RENDER_SERVICE_ID"))
+            or os.getenv("APP_ENV", "").strip().lower() in {"production", "prod"}
+        )
+        if hosted_runtime and not authentication_required():
+            raise RuntimeError("Hosted mode requires AUTH_REQUIRED=true.")
         if authentication_required() and engine is None:
             if supabase_url() is None:
                 raise RuntimeError("SUPABASE_URL is required when AUTH_REQUIRED is enabled.")
@@ -75,6 +83,15 @@ def create_app(engine: Engine | None = None) -> FastAPI:
     @app.get("/health", tags=["system"])
     def health():
         return {"status": "ok"}
+
+    @app.get("/ready", tags=["system"])
+    def ready():
+        try:
+            with database_engine.connect() as connection:
+                connection.execute(text("SELECT 1"))
+        except SQLAlchemyError as exc:
+            raise HTTPException(status_code=503, detail="Database unavailable.") from exc
+        return {"status": "ok", "database": "connected"}
 
     # Delegates resolve module globals at request time. Tests can replace the
     # external transport without coupling route modules to a concrete client.

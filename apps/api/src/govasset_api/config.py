@@ -11,6 +11,7 @@ def load_local_environment(env_file: Path = LOCAL_ENV_FILE) -> None:
     runtime = os.getenv("APP_ENV", "").strip().lower()
     if (
         os.getenv("RENDER_SERVICE_ID")
+        or os.getenv("VERCEL")
         or runtime in {"production", "prod"}
     ):
         return

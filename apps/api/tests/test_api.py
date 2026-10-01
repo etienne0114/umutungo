@@ -60,6 +60,13 @@ def register_membership(client: TestClient, user_id: str, institution_id: int, r
     )
 
 
+def test_readiness_checks_database_connection(client):
+    response = client.get("/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "database": "connected"}
+
+
 def test_create_asset_and_reject_duplicate_code(client):
     first = create_asset(client)
     assert first.status_code == 201
@@ -120,6 +127,7 @@ def test_local_environment_file_loads_for_uvicorn_without_overriding_shell_value
         "SUPABASE_SERVICE_ROLE_KEY=local-test-secret\n"
     )
     monkeypatch.delenv("RENDER_SERVICE_ID", raising=False)
+    monkeypatch.delenv("VERCEL", raising=False)
     monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.delenv("SUPABASE_URL", raising=False)
     monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "shell-secret")
@@ -136,6 +144,21 @@ def test_local_environment_file_is_not_loaded_on_render(monkeypatch, tmp_path):
     env_file = tmp_path / ".env.local"
     env_file.write_text("SUPABASE_URL=https://local-project.supabase.co\n")
     monkeypatch.setenv("RENDER_SERVICE_ID", "srv-production")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+
+    load_local_environment(env_file)
+
+    assert "SUPABASE_URL" not in os.environ
+
+
+def test_local_environment_file_is_not_loaded_on_vercel(monkeypatch, tmp_path):
+    from govasset_api.config import load_local_environment
+
+    env_file = tmp_path / ".env.local"
+    env_file.write_text("SUPABASE_URL=https://local-project.supabase.co\n")
+    monkeypatch.delenv("RENDER_SERVICE_ID", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("APP_ENV", "development")
     monkeypatch.delenv("SUPABASE_URL", raising=False)
 
     load_local_environment(env_file)

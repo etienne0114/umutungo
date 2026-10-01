@@ -9,6 +9,7 @@ titans/
 ├── apps/
 │   ├── api/
 │   │   ├── migrations/versions/       # ordered, data-preserving Alembic changes
+│   │   ├── vercel.json                # FastAPI function and region configuration
 │   │   ├── scripts/                   # explicit operator utilities
 │   │   ├── src/govasset_api/
 │   │   │   ├── api/
@@ -37,7 +38,7 @@ titans/
 ├── docs/                               # maintained product and architecture record
 ├── scripts/                            # repository-level development workflows
 ├── project.yaml                        # scope, principles, and delivery gates
-└── render.yaml                         # API deployment definition
+└── render.yaml                         # existing Render fallback definition
 ```
 
 ## Backend request flow
